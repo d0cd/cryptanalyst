@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# Usage: scripts/hunt-all [tier] [agent]
+#   tier:  smoke | applied | all   (default: smoke)
+#   agent: claude | codex          (default: claude)
+#
+# Runs scripts/hunt sequentially across every target in the chosen tier.
+# A single target failing does not abort the rest. Outputs land in
+# runs/<id>-<target>-<agent>/ as usual; aggregate via:
+#   cat runs/*/run.json | jq -s 'sort_by(.target_name)
+#     | .[] | {target: .target_name, agent, n_findings,
+#               exit_reason, duration_seconds}'
+set -u
+
+cd "$(dirname "$0")/.."
+
+TIER="${1:-smoke}"
+AGENT="${2:-claude}"
+
+case "$TIER" in
+    smoke|applied|blind)
+        DIRS=(targets/$TIER/*/)
+        ;;
+    all)
+        # `blind` is deliberately excluded — it's a sanitization probe,
+        # not part of the routine bench. Run it with `hunt-all blind` only.
+        DIRS=(targets/smoke/*/ targets/applied/*/)
+        ;;
+    *)
+        echo "Unknown tier: $TIER (must be 'smoke', 'applied', 'blind', or 'all')" >&2
+        exit 1
+        ;;
+esac
+
+TOTAL=${#DIRS[@]}
+i=0
+FAILED=()
+for t in "${DIRS[@]}"; do
+    i=$((i + 1))
+    echo
+    echo "===== [$i/$TOTAL] $t ($AGENT) ====="
+    if ! ./scripts/hunt "$t" "$AGENT"; then
+        FAILED+=("$t")
+        echo "  (exited non-zero, continuing)"
+    fi
+done
+
+echo
+echo "===== summary ====="
+echo "  ran: $TOTAL"
+echo "  failed: ${#FAILED[@]}"
+for f in "${FAILED[@]}"; do
+    echo "    - $f"
+done

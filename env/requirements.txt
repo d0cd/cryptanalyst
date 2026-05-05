@@ -1,0 +1,22 @@
+# Crypto libs
+cryptography==43.0.3
+pycryptodome==3.21.0
+pynacl==1.5.0
+ecdsa==0.19.0
+
+# Math
+sympy==1.13.3
+gmpy2==2.2.1
+z3-solver==4.13.4.0
+
+# Testing
+hypothesis==6.122.3
+pytest==8.3.4
+
+# Agent SDKs
+anthropic==0.42.0
+openai==1.59.3
+claude-agent-sdk==0.1.0
+
+# MCP framework
+mcp==1.2.0

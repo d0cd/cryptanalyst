@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+echo "Building crypto-audit:latest"
+docker build -t crypto-audit:latest -f env/Dockerfile .
+
+echo "Build complete. Image size:"
+docker image ls crypto-audit:latest --format "  {{.Size}}"
+
+echo "Verifying spec'd tools resolve on PATH (as host UID, the way scripts/hunt runs)..."
+TOOLS=(python3 sage lean lake claude codex rg jq)
+MISSING=0
+for tool in "${TOOLS[@]}"; do
+    if docker run --rm --user "$(id -u):$(id -g)" --entrypoint /bin/bash crypto-audit:latest -c "command -v $tool >/dev/null"; then
+        echo "  $tool: OK"
+    else
+        echo "  $tool: MISSING" >&2
+        MISSING=1
+    fi
+done
+
+if [[ $MISSING -ne 0 ]]; then
+    echo "ERROR: one or more tools missing from the image. Inspect env/Dockerfile." >&2
+    exit 1
+fi

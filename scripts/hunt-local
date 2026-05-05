@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Usage: scripts/hunt-local <target-path> [--max-turns N]
+#
+# Runs the harness directly (no Docker) using the local Claude Agent SDK.
+# Requires: claude CLI installed, Python venv at .venv/ with dependencies.
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+if [[ $# -lt 1 ]]; then
+    echo "Usage: $0 <target-path> [--max-turns N]" >&2
+    exit 1
+fi
+
+TARGET="$1"
+shift
+
+if [[ ! -d "$TARGET" ]]; then
+    echo "Target directory not found: $TARGET" >&2
+    exit 1
+fi
+
+# Use .venv if it exists, otherwise system python
+if [[ -f .venv/bin/python ]]; then
+    PYTHON=.venv/bin/python
+else
+    PYTHON=python3
+fi
+
+# Verify the SDK is importable
+if ! "$PYTHON" -c "import claude_agent_sdk" 2>/dev/null; then
+    echo "claude_agent_sdk not found. Install with: uv pip install claude-agent-sdk" >&2
+    exit 1
+fi
+
+exec "$PYTHON" -m runner.audit "$TARGET" --agent claude "$@"

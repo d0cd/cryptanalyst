@@ -1,0 +1,8 @@
+{
+  "msg_hex": "66696e616c2d7461726765742d6d657373616765",
+  "note": "After recovering the private key, sign this message with k=1 and compare against expected_sig_with_k1 to verify recovery.",
+  "expected_sig_with_k1": {
+    "r": "0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+    "s": "0xc49a4115da8e0b8a08664ac7bfcd1db2f0ba5412915bd625b15daf80682dd4a5"
+  }
+}

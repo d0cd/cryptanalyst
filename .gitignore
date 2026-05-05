@@ -1,0 +1,21 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Local Claude settings (per-user)
+.claude/settings.local.json
+
+# Run outputs (keep directory, ignore contents)
+# Move a run dir into runs/published/ to share it.
+runs/*
+!runs/.gitkeep
+!runs/published/
+
+# Private targets — third-party / pre-disclosure code; never commit
+targets/private/*
+!targets/private/.gitkeep
+
+# OS
+.DS_Store

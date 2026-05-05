@@ -1,0 +1,145 @@
+#!/usr/bin/env bash
+# Usage: scripts/hunt <target-path> [agent] [mode]
+#   agent defaults to "claude"; use "codex" for the other backend.
+#   mode defaults to "hunt"; resolves to prompts/<mode>.md.
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+if [[ $# -lt 1 ]]; then
+    echo "Usage: $0 <target-path> [agent] [mode]" >&2
+    exit 1
+fi
+
+TARGET="$1"
+AGENT="${2:-claude}"
+MODE="${3:-hunt}"
+
+if [[ ! -d "$TARGET" ]]; then
+    echo "Target directory not found: $TARGET" >&2
+    exit 1
+fi
+
+# Auth strategy differs by agent:
+#
+#   Claude — On macOS the Max-plan OAuth token lives in the system
+#     Keychain and isn't portable to a Linux container; the `claude`
+#     CLI's `--bare` mode docs confirm "OAuth and keychain are never
+#     read" non-interactively. So we require ANTHROPIC_API_KEY (Max
+#     plan members can generate a key at console.anthropic.com that
+#     bills against the Max quota). A future Linux-host code path
+#     could mount ~/.claude.json directly, but that's not the case
+#     today.
+#
+#   Codex — ~/.codex/auth.json holds the ChatGPT-account OAuth token
+#     as a real file, so we mount it RO at /auth_src and let audit.py
+#     copy it into a writable tmpfs HOME at run start. This keeps the
+#     host file immutable. Note that ChatGPT-account auth can't use
+#     the default `gpt-5-codex` model; CODEX_MODEL env overrides.
+AUTH_ARGS=()
+case "$AGENT" in
+    claude)
+        if [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
+            AUTH_ARGS+=(-e ANTHROPIC_API_KEY)
+        else
+            echo "No Claude auth. Generate an API key at console.anthropic.com" >&2
+            echo "(Max-plan keys bill against your Max quota), then export ANTHROPIC_API_KEY." >&2
+            exit 1
+        fi
+        ;;
+    codex)
+        if [[ -f "$HOME/.codex/auth.json" ]]; then
+            # Mount specific credential files only — `~/.codex/` also
+            # contains a transient `tmp/` dir whose files come and go
+            # mid-process and break a recursive copy at run start.
+            AUTH_ARGS+=(-v "$HOME/.codex/auth.json:/auth_src/.codex/auth.json:ro")
+            [[ -f "$HOME/.codex/config.toml" ]] && \
+                AUTH_ARGS+=(-v "$HOME/.codex/config.toml:/auth_src/.codex/config.toml:ro")
+            [[ -f "$HOME/.codex/installation_id" ]] && \
+                AUTH_ARGS+=(-v "$HOME/.codex/installation_id:/auth_src/.codex/installation_id:ro")
+        elif [[ -n "${OPENAI_API_KEY:-}" ]]; then
+            AUTH_ARGS+=(-e OPENAI_API_KEY)
+        else
+            echo "No Codex auth: run 'codex login' on the host or set OPENAI_API_KEY" >&2
+            exit 1
+        fi
+        ;;
+    *)
+        echo "Unknown agent: $AGENT (must be 'claude' or 'codex')" >&2
+        exit 1
+        ;;
+esac
+
+TARGET_ABS="$(cd "$TARGET" && pwd)"
+TARGET_NAME="$(basename "$TARGET_ABS")"
+REPO="$(pwd)"
+
+if [[ ! -d "$TARGET_ABS/code" ]]; then
+    echo "Target has no code/ subdirectory: $TARGET_ABS" >&2
+    exit 1
+fi
+
+# Generate the run id on the host so we can mount only this run's output
+# dir into the container. That way the agent can't see prior runs (which
+# contain past findings, traces, and PoCs it could trivially copy).
+RUN_ID="$(date +%Y%m%d-%H%M%S)-${TARGET_NAME}-${AGENT}"
+RUN_DIR="$REPO/runs/$RUN_ID"
+mkdir -p "$RUN_DIR"
+
+# Captured for run.json so a run can be tied back to a specific image and
+# repo state. `|| true` keeps these advisory rather than failing the run.
+IMAGE_DIGEST="$(docker image inspect crypto-audit:latest --format '{{.Id}}' 2>/dev/null || echo unknown)"
+GIT_SHA="$(git rev-parse --verify HEAD 2>/dev/null || echo unborn)"
+
+# Bind mounts:
+#   /repo/run        RW — only this run's output dir (agent's cwd)
+#   /repo/run/code   RO — target source, mounted under run dir so AGENTS.md's
+#                         `code/` reference resolves relative to cwd. Only the
+#                         code subtree is visible: any sibling expected.json /
+#                         walkthrough next to code/ is invisible to the agent.
+#   /repo/runner     RO — orchestration code (loaded by `python3 -m runner.audit`)
+#   /repo/instructions, /repo/prompts  RO — agent guidance
+# Wall-clock cap: a stuck agent burns API quota silently. SIGTERM after
+# HUNT_TIMEOUT seconds, SIGKILL 30s later if the container ignores it.
+# Override via env: `HUNT_TIMEOUT=1800 ./scripts/hunt ...` for long audits.
+HUNT_TIMEOUT="${HUNT_TIMEOUT:-600}"
+
+# Run with set +e so a timeout (rc 124) doesn't abort before scrub-secrets.
+set +e
+timeout --kill-after=30s "${HUNT_TIMEOUT}s" \
+docker run --rm \
+    --user "$(id -u):$(id -g)" \
+    -v "$RUN_DIR:/repo/run" \
+    -v "$TARGET_ABS/code:/repo/run/code:ro" \
+    -v "$REPO/runner:/repo/runner:ro" \
+    -v "$REPO/instructions:/repo/instructions:ro" \
+    -v "$REPO/prompts:/repo/prompts:ro" \
+    --tmpfs /tmp:size=2G \
+    --memory=16g --cpus=4 --pids-limit=512 \
+    "${AUTH_ARGS[@]}" \
+    --tmpfs /home/audit:size=128M,uid=$(id -u),gid=$(id -g) \
+    -e HOME=/home/audit \
+    ${CODEX_MODEL:+-e CODEX_MODEL="$CODEX_MODEL"} \
+    -w /repo \
+    crypto-audit:latest \
+    python3 -m runner.audit --run-dir /repo/run --agent "$AGENT" \
+        --mode "$MODE" \
+        --run-id "$RUN_ID" --target-name "$TARGET_NAME" \
+        --image-digest "$IMAGE_DIGEST" --git-sha "$GIT_SHA"
+RC=$?
+set -e
+
+if [[ $RC -eq 124 ]]; then
+    echo "WARNING: hunt exceeded HUNT_TIMEOUT=${HUNT_TIMEOUT}s and was terminated. Partial artifacts in $RUN_DIR" >&2
+elif [[ $RC -eq 137 ]]; then
+    echo "WARNING: hunt was SIGKILLed after the grace period. Partial artifacts in $RUN_DIR" >&2
+fi
+
+# RUN_ID, TARGET_NAME, IMAGE_DIGEST, GIT_SHA are passed as CLI args to
+# the runner (which records them in run.json) instead of env vars, so
+# the agent's bash sessions can't read the target's identity via `env`
+# or `printenv`. The agent only sees CODEX_MODEL (if set) and HOME.
+
+./scripts/scrub-secrets "$RUN_DIR"
+
+exit $RC
