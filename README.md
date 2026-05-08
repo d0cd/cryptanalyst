@@ -7,7 +7,7 @@ Codex. Both agents see an identical containerized workspace and toolchain
 ## What makes it different
 
 - **Goal-directed, not procedural.** The agent picks the approach (pattern matching, differential testing, formal modeling, exploit reproduction); methodology is a means, not a playbook.
-- **Two cooperating modes.** `formalize` grows a cumulative Lean model; `hunt` attacks adversarially. Both share a per-target state directory and can run concurrently via git-worktree snapshots.
+- **Two cooperating modes.** `formalize` grows a cumulative Lean model; `hunt` attacks adversarially. Both share a per-target state directory; can run concurrently in isolated state snapshots.
 - **Agent-agnostic.** Identical Docker workspace for Claude Code and Codex; reasoning effort and model are flags.
 - **Three-knob budget.** `--cycles` × `--cycle-budget` × `--timeout`. No SDK iteration or spend caps layered on top.
 
@@ -17,27 +17,32 @@ Codex. Both agents see an identical containerized workspace and toolchain
 # 1. Build (15-25 min one-time, Mathlib cache).
 ./scripts/build-image
 
-# 2. Generate applied-tier fixtures (one-time setup).
-./scripts/generate-fixtures
+# 2. Set Claude credentials (or codex login).
+claude setup-token                       # interactive; prints a token
+export CLAUDE_CODE_OAUTH_TOKEN=<paste it>
 
-# 3. Set Claude credentials (or codex login).
-claude setup-token
-export CLAUDE_CODE_OAUTH_TOKEN=<the-token>
+# 3. Verify the install end-to-end (one cycle on a smoke target).
+./scripts/test-install
 
-# 4. Run.
-./scripts/hunt targets/smoke/smoke-14
+# 4. Run on any target.
+./scripts/hunt targets/smoke/smoke-01
 ```
 
-Findings land at `runs/<run-id>/artifacts/findings.json`. See
-[docs/RUNNING.md](docs/RUNNING.md) for the full flag set.
+Findings land at `runs/<run-id>/artifacts/findings.json`. Before running
+applied-tier targets, run `./scripts/generate-fixtures` once.
 
 ## Docs
 
-- **[Setup](docs/INSTALL.md)** — install, build, auth (Claude / Codex)
-- **[Running](docs/RUNNING.md)** — flags, modes, budgets, snapshot pipeline, output structure
-- **[Targets](docs/TARGETS.md)** — target tiers, anonymization, `audit.md` conventions
-- **[Design](docs/DESIGN.md)** — architecture, decisions, trade-offs
+**Get started**
+- **[Setup](docs/INSTALL.md)** — hardware, build, auth (Claude / Codex)
+- **[Running](docs/RUNNING.md)** — flags, modes, budgets, snapshot pipeline, output
+
+**Reference**
+- **[Targets](docs/TARGETS.md)** — tiers, anonymization, `audit.md` conventions
 - **[Troubleshooting](docs/TROUBLESHOOTING.md)** — common issues
+
+**Internals**
+- **[Design](docs/DESIGN.md)** — architecture, decisions, trade-offs
 - **[Roadmap](docs/ROADMAP.md)** — bug-class roadmap
 - **[Agent system prompt](instructions/AGENTS.md)** — methodology the agent follows
 - **[Mode prompts](prompts/)** — per-cycle prompts for `hunt` and `formalize`
@@ -48,7 +53,7 @@ Findings land at `runs/<run-id>/artifacts/findings.json`. See
 runner/        per-cycle loop + adapter protocol (claude.py, codex.py, base.py)
 prompts/       per-cycle agent prompts (hunt.md, formalize.md)
 instructions/  agent's always-loaded system prompt (AGENTS.md)
-scripts/       hunt, hunt-all, hunt-local, republish, build-image, generate-fixtures, scrub-secrets
+scripts/       hunt, hunt-all, hunt-local, build-image, test-install, generate-fixtures, scrub-secrets, republish
 mcp_servers/   Lean MCP server (long-lived REPL)
 env/          Docker build context (Dockerfile, lakefile, requirements.txt) and vendored Lean skills
 targets/       smoke / applied / blind / production / private (private + production gitignored)

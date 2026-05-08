@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# scripts/test-install — verify a fresh build can produce findings.
+#
+# Runs one cycle on the smallest smoke target with a tight budget, then
+# checks that findings.json was written. Exits non-zero on any failure.
+#
+# Use after `./scripts/build-image` to confirm the install works end-to-end:
+# auth, container, lean toolchain, MCP server, prompt loading, output.
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+TARGET="targets/smoke/smoke-01"
+[[ -d "$TARGET/code" ]] || { echo "FAIL: $TARGET/code missing"; exit 1; }
+
+echo "[test-install] running $TARGET (1 cycle, 600s budget) ..."
+./scripts/hunt "$TARGET" --cycles 1 --cycle-budget 600 --timeout 900
+
+# Locate the run we just produced.
+RUN_DIR="$(ls -td runs/*-smoke-01-* 2>/dev/null | head -1)"
+[[ -n "$RUN_DIR" ]] || { echo "FAIL: no run dir produced under runs/"; exit 1; }
+
+FINDINGS="$RUN_DIR/artifacts/findings.json"
+[[ -f "$FINDINGS" ]] || { echo "FAIL: $FINDINGS not written"; exit 1; }
+
+# JSON parse + schema check (must have 'findings' key).
+python3 -c "
+import json, sys
+d = json.load(open('$FINDINGS'))
+if not isinstance(d, dict) or 'findings' not in d:
+    print('FAIL: findings.json malformed', file=sys.stderr); sys.exit(1)
+print(f\"[test-install] OK — {len(d['findings'])} findings in {'$RUN_DIR'}\")"

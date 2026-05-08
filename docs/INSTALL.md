@@ -2,6 +2,10 @@
 
 Requires Docker and an API key for whichever agent you use.
 
+## Hardware
+
+The container is configured for **16 GB RAM** and **4 CPUs** (set in `scripts/hunt`); lower may OOM mid-cycle. The image is **~16 GB** on disk after build, plus ~5 GB per actively-running target. First-time build downloads Mathlib's binary cache (~15-25 min depending on network). Both arm64 (Apple Silicon) and amd64 are supported automatically.
+
 ## 1. Build the image
 
 ```bash
@@ -11,11 +15,13 @@ Requires Docker and an API key for whichever agent you use.
 First build is slow — Mathlib takes 15-25 minutes. Cached for subsequent
 builds.
 
-## 2. Generate applied-tier fixtures (one time)
+## 2. Generate applied-tier fixtures (only before running applied targets)
 
 ```bash
 ./scripts/generate-fixtures
 ```
+
+Smoke targets don't need this; skip if you're only running smoke.
 
 ## 3. Set credentials
 
