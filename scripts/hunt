@@ -261,8 +261,8 @@ docker run --rm \
     -v "$REPO/runner:/repo/runner:ro" \
     -v "$REPO/instructions:/repo/instructions:ro" \
     -v "$REPO/prompts:/repo/prompts:ro" \
-    -v "$REPO/env/lean-skills/skills:/repo/lean-skills:ro" \
-    -v "$REPO/env/lean4-skills/plugins/lean4:/repo/lean4-skills:ro" \
+    -v "$REPO/env/skills/lean-skills/skills:/repo/lean-skills:ro" \
+    -v "$REPO/env/skills/lean4-skills/plugins/lean4:/repo/lean4-skills:ro" \
     "${PERSISTENCE_MOUNTS[@]}" \
     --tmpfs /tmp:size=2G \
     --memory=16g --cpus=4 --pids-limit=512 \
