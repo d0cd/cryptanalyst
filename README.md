@@ -6,21 +6,10 @@ Codex. Both agents see an identical containerized workspace and toolchain
 
 ## What makes it different
 
-- **Goal-directed, not procedural.** The agent reads the target, picks an
-  approach (pattern matching, differential testing, formal modeling,
-  exploit reproduction, ...), and pursues it. Methodology is a means,
-  not a fixed playbook.
-- **Two cooperating modes.** `formalize` builds a cumulative Lean model
-  of the target's protocol (typed `Op` family, state-machine invariants,
-  decomposed proof trees with named hardness axioms). `hunt` attacks
-  adversarially. Both share a per-target durable state directory; they
-  can run concurrently via git-worktree snapshots.
-- **Both agents on equal footing.** Identical Docker workspace, identical
-  tools (Lean 4 + Mathlib, SageMath, Python crypto libs, web access).
-  Reasoning effort (`low` … `xhigh`) and model selection are flags.
-- **Minimal budget surface.** Three layers: cycles (depth) ×
-  cycle-budget (per-cycle wall-clock) × timeout (host-side hard kill).
-  No SDK iteration or spend caps on top.
+- **Goal-directed, not procedural.** The agent picks the approach (pattern matching, differential testing, formal modeling, exploit reproduction); methodology is a means, not a playbook.
+- **Two cooperating modes.** `formalize` grows a cumulative Lean model; `hunt` attacks adversarially. Both share a per-target state directory and can run concurrently via git-worktree snapshots.
+- **Agent-agnostic.** Identical Docker workspace for Claude Code and Codex; reasoning effort and model are flags.
+- **Three-knob budget.** `--cycles` × `--cycle-budget` × `--timeout`. No SDK iteration or spend caps layered on top.
 
 ## Quickstart
 
@@ -69,6 +58,4 @@ runs/          per-run output (gitignored except runs/published/ for demo eviden
 
 ## Status
 
-Research / experimental. No grader; findings require human verification.
-The agent does not "win" against a benchmark — it surfaces candidates with
-line-cited evidence and runnable repros, which the operator reads.
+Research / experimental. Findings are agent-surfaced candidates with line citations and runnable repros; the operator verifies.

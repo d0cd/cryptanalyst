@@ -95,32 +95,27 @@ Each run writes to `runs/<timestamp>-<target>-<agent>/`:
 
 ```
 runs/20260504-143022-smoke-14-claude/
-├── code/                  # snapshot of the target source
-├── audit.md               # per-target operator context (if present)
+├── code/                # target source snapshot
+├── audit.md             # operator context (if present)
 ├── artifacts/
-│   ├── findings.json      # the deliverable
-│   ├── notes.md           # agent's working notes
-│   ├── threat-model.md    # if hunt mode bootstrapped one
-│   ├── repro/             # PoC scripts (Cargo.toml + src for Rust repros)
-│   ├── sage/              # SageMath models, if any
-│   └── lean/              # Lean files, if any (most lean work goes to <target>/state/lean/)
-├── trace.cycle01.jsonl    # message stream, cycle 1
-├── trace.cycle02.jsonl    # message stream, cycle 2
-├── ...
-└── run.json               # run metadata (cycles, durations, model, effort, status)
+│   ├── findings.json    # the deliverable
+│   ├── notes.md         # agent's working notes
+│   ├── repro/           # PoC scripts
+│   ├── sage/            # SageMath models, if any
+│   └── lean/            # Lean files (most live in <target>/state/lean/)
+├── trace.cycle01.jsonl  # one trace file per cycle
+└── run.json             # cycles, durations, model, effort, status
 ```
 
-## Inspecting output
-
+Inspect:
 ```bash
-cat runs/<run-id>/artifacts/findings.json | jq .
-cat runs/<run-id>/artifacts/notes.md
-less runs/<run-id>/trace.cycle*.jsonl
-jq -c 'select(.type == "tool_use")' runs/<run-id>/trace.cycle*.jsonl
-
-# Run a reproduction
+jq . runs/<run-id>/artifacts/findings.json
 cd runs/<run-id>/artifacts/repro/<finding-id> && ./run.sh
 ```
+
+Compare agents by running both on the same target — `runs/*-smoke-14-*/artifacts/findings.json` will sit side by side. Trace encodings differ (Claude SDK vs Codex CLI JSON) but `artifacts/` shape is identical.
+
+To audit your own code, drop it into a target directory with a `code/` subdir (and optional `audit.md`), then `./scripts/hunt my-target/`. Pre-disclosure code goes under `targets/private/` (gitignored).
 
 ## Sweeping a tier
 
@@ -142,37 +137,3 @@ cat runs/*/run.json | jq -s 'sort_by(.target_name)
             exit_reason, duration_seconds}'
 ```
 
-## Comparing agents
-
-Run both on the same target, then read their findings.json side by side:
-
-```bash
-./scripts/hunt targets/smoke/smoke-14 --agent claude
-./scripts/hunt targets/smoke/smoke-14 --agent codex
-
-ls -la runs/*-smoke-14-*/artifacts/findings.json
-```
-
-The trace files differ in encoding (Claude's uses SDK message objects,
-Codex's uses CLI JSON output) but the artifacts directory has the same
-structure and is directly comparable.
-
-## Auditing your own code
-
-Drop your code into a target directory:
-
-```
-my-target/
-├── code/
-│   └── crypto_lib.py
-└── audit.md            # (optional) scope / known findings / methodology hints
-```
-
-Then:
-
-```bash
-./scripts/hunt my-target/
-```
-
-Per-disclosure or NDA-restricted code goes under `targets/private/`,
-which is gitignored.

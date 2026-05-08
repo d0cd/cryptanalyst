@@ -31,11 +31,3 @@ git clone --depth 1 https://github.com/cameronfreer/lean4-skills.git env/skills/
 
 The agent reads them when proof-construction or Mathlib-navigation
 comes up; see `instructions/AGENTS.md` for when each is consulted.
-
-## Why split this way
-
-`Dockerfile` + `lean_workspace/` produce a deterministic image — same
-input, same image. The vendored skills are pinned to a host-side
-checkout that the operator controls per machine. Mixing them at the
-top of `env/` would obscure that one is a *build* concern and the
-other is a *runtime* concern.
