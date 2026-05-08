@@ -49,7 +49,7 @@ Findings land at `runs/<run-id>/artifacts/findings.json`. See
 - **[Targets](docs/TARGETS.md)** — target tiers, anonymization, `audit.md` conventions
 - **[Design](docs/DESIGN.md)** — architecture, decisions, trade-offs
 - **[Troubleshooting](docs/TROUBLESHOOTING.md)** — common issues
-- **[Production candidates](docs/PRODUCTION-CANDIDATES.md)** — bug-class roadmap
+- **[Roadmap](docs/ROADMAP.md)** — bug-class roadmap
 - **[Agent system prompt](instructions/AGENTS.md)** — methodology the agent follows
 - **[Mode prompts](prompts/)** — per-cycle prompts for `hunt` and `formalize`
 

@@ -10,7 +10,7 @@ When you're working in this repo, you're modifying the harness itself.
 |---|---|
 | `README.md` | User-facing entry point — read this first |
 | `docs/DESIGN.md` | Why decisions went the way they did |
-| `docs/PRODUCTION-CANDIDATES.md` | Roadmap of bug classes not yet covered |
+| `docs/ROADMAP.md` | Roadmap of bug classes not yet covered |
 | `instructions/AGENTS.md` | Loaded as the **agent's** system prompt at run start (copied to `CLAUDE.md` and `AGENTS.md` inside each run dir) |
 | `prompts/<mode>.md` | Per-mode user prompt — currently `hunt` |
 | `runner/audit.py` | In-container entrypoint; loop driver |

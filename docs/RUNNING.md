@@ -122,6 +122,26 @@ jq -c 'select(.type == "tool_use")' runs/<run-id>/trace.cycle*.jsonl
 cd runs/<run-id>/artifacts/repro/<finding-id> && ./run.sh
 ```
 
+## Sweeping a tier
+
+`scripts/hunt-all` runs `scripts/hunt` sequentially across every target
+in a tier. A single target failing doesn't abort the rest.
+
+```bash
+./scripts/hunt-all                # smoke tier, claude (default)
+./scripts/hunt-all applied        # applied tier, claude
+./scripts/hunt-all applied codex  # applied tier, codex
+./scripts/hunt-all blind          # blind tier
+```
+
+Aggregate results across the run set:
+
+```bash
+cat runs/*/run.json | jq -s 'sort_by(.target_name)
+  | .[] | {target: .target_name, agent, n_findings,
+            exit_reason, duration_seconds}'
+```
+
 ## Comparing agents
 
 Run both on the same target, then read their findings.json side by side:
