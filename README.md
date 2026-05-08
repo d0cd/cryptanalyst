@@ -61,6 +61,10 @@ docs/          design notes, install / running / troubleshooting guides
 runs/          per-run output (gitignored except runs/published/ for demo evidence)
 ```
 
+## License
+
+[MIT](LICENSE).
+
 ## Status
 
 Research / experimental. Findings are agent-surfaced candidates with line citations and runnable repros; the operator verifies.
