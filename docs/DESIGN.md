@@ -78,7 +78,7 @@ scripts/
   hunt-local          ─ no-Docker variant for development
   build-image         ─ docker build wrapper
   scrub-secrets       ─ post-run API key scan
-setup/generate_fixtures.py  ─ one-time applied-tier fixture generation
+scripts/generate-fixtures   ─ one-time applied-tier fixture generation
 targets/{smoke,applied,blind}/<id>/
   code/               ─ what the agent sees (RO bind-mount)
   HUMANS.md           ─ ground truth: bug-class, alias, prior findings
