@@ -1,79 +1,25 @@
 # Troubleshooting
 
-## Build
+**Build fails on Mathlib step.** `lake exe cache get` rate-limited by GitHub. Wait and retry; subsequent runs are cached.
 
-**Build fails on Mathlib step.** `lake exe cache get` fetches Mathlib's
-cache from GitHub. If GitHub rate-limits, wait and retry. The Docker
-layer caches the built workspace so subsequent builds skip this.
+**File ownership is root after a run.** Should not happen — the wrapper passes `--user $(id -u):$(id -g)`. If it does, `sudo chown -R $(id -u):$(id -g) runs/`.
 
-**File ownership is root after a run.** The wrapper passes
-`--user $(id -u):$(id -g)`; if you bypass it, fix ownership with
-`sudo chown -R $(id -u):$(id -g) runs/`.
+**Agent runs but produces no findings.json.** Check the trace tail. Most common: MCP server failure (Lean REPL crashed) or `--cycle-budget` hit mid-tool-use (`stop_reason: tool_use` near the budget). For the latter, raise `--cycle-budget`.
 
-## Cycles
+**Cycle ends mid-investigation.** Default 600s budget is tight at higher reasoning effort. `--effort high|xhigh` typically wants `--cycle-budget 1000-1500`.
 
-**Agent runs but produces no findings.json.** Check the trace for tool
-errors. Most common causes:
-- MCP server failure (Lean REPL crashed and didn't recover)
-- The cycle hit `--cycle-budget` mid-tool-use
+**Cycles take wildly different times.** Expected — investigating an already-modeled hypothesis can finish in 90s; primitive-flow enumeration across a large module takes the full budget. Consistently hitting the cap is the signal to raise it.
 
-Inspect the tail of the trace; if `stop_reason: tool_use` and the wall
-clock approaches the budget, raise `--cycle-budget`.
+**Claude credentials expire mid-run.** The `~/.claude/.credentials.json` route has a ~10-15 min access-token TTL. Use `CLAUDE_CODE_OAUTH_TOKEN` from `claude setup-token` (1-year TTL) for long runs. Codex's `~/.codex/auth.json` self-refreshes; if it gets stuck, `codex login` again or fall back to `OPENAI_API_KEY`.
 
-**Cycle ends mid-investigation.** Default budget is 600s. Raise it with
-`--cycle-budget 1200` on `scripts/hunt`. At higher reasoning effort
-(`--effort high|xhigh`) cycles run longer; budgets in the 1000-1500s
-range are reasonable.
+**Container outlives the kill signal.** `docker stop` sends SIGTERM (10s grace) then SIGKILL. The python runner has no SIGTERM handler, so the in-flight cycle's work is lost. State committed before the kill is durable.
 
-**Cycles take wildly different times.** Different cycles do different
-work — a cycle that's "investigating one open hypothesis" against
-already-modeled code can finish in 90s; one doing primitive-flow
-enumeration across a large module takes the full budget. Variance is
-expected; consistently hitting the budget cap is the signal to raise it.
+**Two containers writing to the same `/state` simultaneously.** Use `--snapshot` on the secondary run (typically hunt) to mount an isolated git worktree.
 
-## Auth
+**Container appears to hang.** Host-side `--timeout SEC` (default 7200s) hard-kills via `timeout(1)`. On macOS, laptop sleep suspends the docker process without firing the asyncio cycle-budget — `caffeinate -dimsu` during long runs (Linux: `systemd-inhibit --what=sleep:idle`).
 
-**Claude credentials expire mid-run.** The credentials.json route has a
-short access-token TTL (~10-15 min). Use `CLAUDE_CODE_OAUTH_TOKEN` from
-`claude setup-token` for long runs (1-year TTL). See `docs/INSTALL.md`.
+**Package installs are slow.** Container is ephemeral; downloads each run. Add persistently-needed libs to `env/requirements.txt` and rebuild.
 
-**Codex auth refresh fails.** `~/.codex/auth.json` self-refreshes; if it
-gets stuck, run `codex login` again on the host to refresh, or fall
-back to `OPENAI_API_KEY`.
+**`lake build` fails with stale-olean errors after a snapshot run.** Lake-cache drift. `rm -rf <target>/state/.lake-cache && lake build` to rebuild (~5 min).
 
-## Container
-
-**Container outlives the kill signal.** `docker stop` sends SIGTERM
-with a 10s grace period, then SIGKILL. The python runner inside doesn't
-have a SIGTERM handler, so the in-flight cycle's work is lost. State
-that was committed before the kill is durable.
-
-**Two containers writing to the same target's `/state` simultaneously.**
-This is the Shape 1 conflict. Use `--snapshot` on the secondary run
-(typically hunt) to mount an isolated worktree instead.
-
-**Container appears to hang.** The host-side `--timeout SEC` (default
-7200s = 2h) hard-kills via `timeout(1)`. If a single run needs more,
-raise it. Note that on macOS, laptop sleep suspends the docker process
-without firing the asyncio timeout — caffeinate during long runs.
-
-## Packages
-
-**Package installs are slow.** Packages are downloaded each run since
-the container is ephemeral. If the agent consistently needs a library,
-add it to `env/requirements.txt` and rebuild.
-
-## Lean state
-
-**`lake build` fails with stale-olean errors after a snapshot run.**
-The lake-cache for the worktree is separate, but if it was bind-
-mounted alongside the live cache, oleans can drift. Run
-`rm -rf <target>/state/.lake-cache && lake build` to rebuild from
-scratch (~5 min).
-
-**Embedded git repository warning when committing.** The agent's
-per-cycle commits inside `<target>/state/.git` are intentional; the
-state dir is gitignored from the harness repo. If you publish a run
-via `scripts/republish`, the script flattens the inner `.git` into a
-`git-history.log` file so the outer repo can track the state contents
-as regular files.
+**Embedded git repository warning when committing the harness repo.** The agent's per-cycle commits inside `<target>/state/.git` are intentional and gitignored. `scripts/republish` flattens the inner `.git` into `git-history.log` when copying into `runs/published/`.
