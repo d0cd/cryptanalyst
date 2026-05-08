@@ -1,0 +1,23 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "bug_class": "anomalous_curve_ecdlp",
+      "severity": "CRITICAL",
+      "location": {
+        "file": "code/ecdsa.py",
+        "lines": [21, 33]
+      },
+      "summary": "The custom ECDSA curve is anomalous: the field prime P, configured scalar order N, full curve order, and generator order are all the same prime. For anomalous curves, Smart's attack solves the elliptic-curve discrete logarithm problem efficiently, so an attacker can recover a signing private key directly from its public key and forge signatures.",
+      "approach": "pattern_matching + sage_modeling + exploit_reproduction",
+      "repro": "artifacts/repro/F1_smart_attack.sage",
+      "verification_artifact": "artifacts/sage/F1_curve_order.sage",
+      "evidence": "Running `sage artifacts/repro/F1_smart_attack.sage` prints matching recovered and expected private keys, then signs `attacker-controlled firmware update` with the recovered key and verifies the forged signature successfully against the target verifier.",
+      "references": [
+        "https://wstein.org/edu/2010/414/projects/novotney.pdf",
+        "https://ecc.danil.co/tasks/anomalous/",
+        "https://crypto.stackexchange.com/questions/52673/why-does-smarts-attack-only-work-on-anomalous-curves"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,78 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "bug_class": "leaf_signature_not_verified",
+      "severity": "CRITICAL",
+      "location": {
+        "file": "code/validator.py",
+        "lines": [89, 90]
+      },
+      "summary": "validate_chain() never verifies the signature on the leaf certificate. The signature loop is `for i in range(1, len(full_chain) - 1): _verify_signature(full_chain[i], full_chain[i + 1])`, which iterates only over intermediates (i ≥ 1). The link `chain[0] (leaf) ← chain[1] (issuer)` is never checked. An attacker who can present any chain whose intermediates correctly chain to the trusted root can substitute an arbitrary leaf cert—signed with any key, including one entirely unrelated to the legitimate intermediate—and the validator returns True. The bug also has a stronger manifestation when `chain == [leaf]` (single-cert chain): `range(1, 1)` is empty, so NO leaf-to-root signature is checked at all, only the root self-signature.",
+      "tier": "1",
+      "reachability": "Public function `validate_chain(chain, trusted_root)` is the trust boundary; `chain` is fully attacker-controlled in standard PKI usage. The vulnerable lines process `full_chain[0]` (the attacker's leaf) by inclusion in `full_chain` but never call `_verify_signature` against it.",
+      "approach": "adversarial_reading + exploit_reproduction",
+      "repro": "artifacts/repro/exploit_leaf_unsigned.py",
+      "evidence": "exploit_leaf_unsigned.py builds an honest Root→Intermediate, then forges a leaf signed with an attacker key (NOT the intermediate's key). A direct cryptographic verify of forged_leaf under inter_cert.public_key() raises InvalidSignature, but validate_chain returns True. The companion repro exploit_chain_len_1.py shows the strongest form: a leaf-only chain with a leaf signed by a stranger key is accepted against a trusted root the attacker does not possess any key for.",
+      "references": [
+        "RFC 5280 §6.1 (Basic Path Validation): every certificate in the chain MUST have a verifiable signature."
+      ]
+    },
+    {
+      "id": "F2",
+      "bug_class": "root_ca_basicconstraints_not_checked",
+      "severity": "MEDIUM",
+      "location": {
+        "file": "code/validator.py",
+        "lines": [82, 86]
+      },
+      "summary": "validate_chain() never checks BasicConstraints(ca=True) on `trusted_root`. The CA-check loop is `for i, cert in enumerate(full_chain[:-1]): ... if i < len(full_chain) - 2: _check_ca(issuer)`. With `full_chain = chain + [trusted_root]` of length n, the loop's body iterates 0..n-2 inclusive but only invokes `_check_ca` on the issuer when `i < n-2`, so the issuer at position n-1 (the root) is exempt. Both an explicit `BasicConstraints(ca=False)` root and a root with no BasicConstraints extension at all are accepted as trust anchors—violating the validator's stated contract that intermediates and roots must be CAs.",
+      "tier": "3",
+      "reachability": "Reachable only when the relying party has placed a non-CA self-signed certificate (or a cert with no BasicConstraints) into the trusted root parameter. The validator silently accepts misconfigured trust anchors instead of failing closed.",
+      "approach": "adversarial_reading + exploit_reproduction",
+      "repro": "artifacts/repro/exploit_root_not_ca.py",
+      "evidence": "exploit_root_not_ca.py runs two cases. Case A: a self-signed cert with explicit BasicConstraints(ca=False) used as trusted_root → validate_chain returns True. Case B: a self-signed cert with no BasicConstraints extension used as trusted_root → validate_chain returns True. Both cases would have been rejected if the root were processed by `_check_ca` like every other CA position in the chain.",
+      "references": [
+        "RFC 5280 §4.2.1.9: CA certificates (including roots) MUST have BasicConstraints with cA=TRUE."
+      ]
+    },
+    {
+      "id": "F3",
+      "bug_class": "basicconstraints_pathlength_not_enforced",
+      "severity": "HIGH",
+      "location": {
+        "file": "code/validator.py",
+        "lines": [26, 33]
+      },
+      "summary": "_check_ca() inspects only `bc.value.ca` and ignores `bc.value.path_length`. RFC 5280 §6.1.4(m) requires the path-validation algorithm to track and decrement maxPathLength as it walks the chain, rejecting (per §6.1.4(l)) when an issuer's declared path_length is exceeded. The validator therefore accepts any chain whose ca-bits are set, regardless of how many intermediates separate a path-constrained CA from the leaf. A real CA legitimately issues a sub-CA cert with `path_length=0` (i.e. 'this sub-CA may sign end-entity certs only — never another CA'); the holder of that sub-CA's key — or any future compromiser — can issue further sub-CAs and rogue leaves, and the validator silently accepts the resulting chain. Unlike F1, this attack succeeds even when every signature in the chain is cryptographically valid, so it is a distinct bug class that fixing F1 would not subsume.",
+      "tier": "2",
+      "reachability": "Attacker-controlled `chain` reaches `_check_ca` at code/validator.py:84-86 for every issuer position. The precondition is the existence of a path-length-constrained intermediate (a routine deployment pattern for delegated PKI, hosted-CA offerings, name-constrained sub-CAs). Once such an intermediate exists and its key is held by an attacker — by legitimate delegation that exceeds its mandate, by compromise, or by mis-issuance — the attacker can compose chains that cleanly verify under this validator while violating the parent CA's path-length policy.",
+      "approach": "adversarial_reading + exploit_reproduction",
+      "repro": "artifacts/repro/exploit_path_length.py",
+      "evidence": "exploit_path_length.py builds Root → Inter1(path_length=0) → Inter2(ca=True,path_length=None) → leaf, where every signature verifies cleanly under the cryptography library (sanity-checked in the repro by direct pub.verify calls). validate_chain([leaf, inter2, inter1], root) returns True. A correct RFC-5280 path validator must reject because inter1's path_length=0 forbids any further CA below it; the rogue inter2 is exactly such a CA.",
+      "references": [
+        "RFC 5280 §4.2.1.9 (BasicConstraints/pathLenConstraint semantics)",
+        "RFC 5280 §6.1.4(l)-(m) (maxPathLength tracking and rejection)"
+      ]
+    },
+    {
+      "id": "F4",
+      "bug_class": "keyusage_keycertsign_not_enforced",
+      "severity": "HIGH",
+      "location": {
+        "file": "code/validator.py",
+        "lines": [26, 33]
+      },
+      "summary": "_check_ca() reads only BasicConstraints.ca and never inspects KeyUsage. RFC 5280 §6.1.4(n) requires that if a certificate used as an issuer has a KeyUsage extension, the keyCertSign bit MUST be asserted; otherwise the chain MUST be rejected. The validator silently accepts an issuer cert whose KeyUsage explicitly sets keyCertSign=False. This breaks the standard mechanism by which a parent CA delegates a sub-key for a narrow purpose (OCSP signing, TLS handshakes, code signing) while explicitly forbidding that key from minting further certificates. Any holder of such a 'restricted' intermediate's private key — whether by legitimate access to the constrained role or by compromise — can mint a child cert and have the chain accepted, with all signatures cryptographically valid. This is a distinct bug from F3: F3 ignores BasicConstraints.path_length, F4 ignores KeyUsage entirely. They share a fix site but represent independent attacker primitives. Fixing F1 (leaf signature) does not subsume F4 because the leaf in this attack IS signed by the issuer; the violated invariant is that the issuer was not authorized to sign certs in the first place.",
+        "tier": "2",
+      "reachability": "The vulnerable lines lie in _check_ca, called for every issuer position in the user-supplied chain (code/validator.py:84-86). Attacker reaches the bug whenever a key-usage-restricted intermediate exists in a deployment that uses validate_chain. KeyUsage-with-key_cert_sign=false intermediates are the canonical RFC-5280 mechanism for limiting sub-CA authority and appear in real PKI hierarchies (HSM-backed sub-CAs, delegated-issuance services, OCSP-only signers). Once such an intermediate's key is held by an attacker, no further preconditions are needed — the validator's path-validation acceptance criterion is satisfied with a fully attacker-controlled leaf.",
+      "approach": "adversarial_reading + exploit_reproduction",
+      "repro": "artifacts/repro/exploit_keyusage.py",
+      "evidence": "exploit_keyusage.py builds Root → RestrictedIntermediate(ca=True, KeyUsage.key_cert_sign=False) → Leaf, where every signature verifies cleanly under direct pub.verify calls (sanity-checked in the repro). validate_chain([leaf, restricted_inter], root) returns True. The intermediate's KeyUsage extension is critical and explicitly sets key_cert_sign=False; an RFC-5280 conformant validator MUST reject the chain at the issuer-eligibility step.",
+      "references": [
+        "RFC 5280 §4.2.1.3 (KeyUsage extension; keyCertSign bit semantics)",
+        "RFC 5280 §6.1.4(n) (path validation step n: keyCertSign assertion check)"
+      ]
+    }
+  ]
+}

@@ -38,7 +38,7 @@ for t in "${DIRS[@]}"; do
     i=$((i + 1))
     echo
     echo "===== [$i/$TOTAL] $t ($AGENT) ====="
-    if ! ./scripts/hunt "$t" "$AGENT"; then
+    if ! ./scripts/hunt "$t" --agent "$AGENT"; then
         FAILED+=("$t")
         echo "  (exited non-zero, continuing)"
     fi

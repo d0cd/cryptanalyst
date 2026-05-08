@@ -1,0 +1,34 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "bug_class": "feldman_trivial_generator_accepts_forged_shares",
+      "severity": "CRITICAL",
+      "location": {
+        "file": "code/vault.py",
+        "lines": [12, 34]
+      },
+      "summary": "Feldman VSS commitments use _FELDMAN_G = 1, so every coefficient commitment is 1 and verification reduces to 1 == 1 for every submitted share. Any malformed or attacker-chosen share verifies against any vault's commitments, which defeats the advertised verifiable-secret-sharing protection and lets an attacker replace verified shares with shares for an attacker-chosen secret.",
+      "approach": "pattern_matching, exploit_reproduction",
+      "repro": "artifacts/repro/f1_feldman_accepts_forged_shares.py",
+      "evidence": "Running the repro prints published commitments [1, 1, 1], shows three forged shares all verify as True, and reconstructs b'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' instead of the honest secret.",
+      "references": [
+        "https://www.zkdocs.com/docs/zkdocs/protocol-primitives/verifiable-secret-sharing/"
+      ]
+    },
+    {
+      "id": "F2",
+      "bug_class": "secret_mod_reduction_data_loss",
+      "severity": "MEDIUM",
+      "location": {
+        "file": "code/vault.py",
+        "lines": [44, 73]
+      },
+      "summary": "share_secret accepts any 32-byte value but converts it to an integer and stores secret_int % P as the Shamir constant term. Because P = 2^256 - 189, the top 189 valid 32-byte strings are silently changed during sharing; for example the 32-byte encoding of P reconstructs as all zero bytes.",
+      "approach": "property_test, exploit_reproduction",
+      "repro": "artifacts/repro/f2_secret_mod_reduction.py",
+      "evidence": "Running the repro shares the 32-byte value equal to P and reconstructs 0000000000000000000000000000000000000000000000000000000000000000 instead of the original secret.",
+      "references": []
+    }
+  ]
+}

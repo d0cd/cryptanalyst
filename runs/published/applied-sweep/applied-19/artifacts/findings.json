@@ -1,0 +1,38 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "bug_class": "missing_public_key_validation_infinity_forgery",
+      "severity": "HIGH",
+      "location": {
+        "file": "code/ecdsa.py",
+        "lines": [99, 111]
+      },
+      "summary": "`verify()` never validates that the supplied public key is a real affine curve point and not the internal point-at-infinity sentinel. Passing `None` as the public key causes `_point_mul(u2, pubkey)` to return `None`, so verification reduces to checking only `u1*G`. An attacker can therefore choose a nonce `k`, set `r = x(kG) mod N` and `s = hash(message) / k mod N`, and produce a signature that verifies for the invalid public key without any private key.",
+      "approach": "pattern_matching + exploit_reproduction",
+      "repro": "artifacts/repro/forge_infinity_pubkey.py",
+      "evidence": "Running the repro prints `verify(None, message, forged_signature) = True` for a signature constructed without a private key.",
+      "references": [
+        "https://www.secg.org/sec1-v2.pdf",
+        "https://ecdsa.readthedocs.io/en/latest/_modules/ecdsa/ellipticcurve.html"
+      ]
+    },
+    {
+      "id": "F2",
+      "bug_class": "ecdsa_high_s_signature_malleability",
+      "severity": "MEDIUM",
+      "location": {
+        "file": "code/ecdsa.py",
+        "lines": [99, 111]
+      },
+      "summary": "`verify()` accepts both halves of the ECDSA scalar range for `s`. For any valid signature `(r, s)`, `(r, N - s)` is a different signature that verifies for the same public key and message. In transaction or signature-identity contexts, this lets a third party alter a valid signature without the private key, changing any identifier or deduplication key derived from the signature bytes.",
+      "approach": "pattern_matching + property_test + exploit_reproduction",
+      "repro": "artifacts/repro/ecdsa_high_s_malleability.py",
+      "evidence": "Running the repro signs `b'test transaction'`, constructs `(r, N-s)`, and prints that both the original and malleated signatures verify while the byte-level signature values differ.",
+      "references": [
+        "https://en.bitcoin.it/wiki/Bip-0062.mediawiki",
+        "https://bips.xyz/146"
+      ]
+    }
+  ]
+}

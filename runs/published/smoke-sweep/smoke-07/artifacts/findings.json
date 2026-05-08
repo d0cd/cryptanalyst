@@ -1,0 +1,24 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "bug_class": "attacker_controlled_verification_key",
+      "severity": "CRITICAL",
+      "location": {
+        "file": "code/jwt.py",
+        "lines": [
+          67,
+          71
+        ]
+      },
+      "summary": "The verifier trusts an attacker-supplied header field named `k` as the HS256 HMAC verification key before consulting the server's secret. An attacker can create any payload, sign it with a key they chose, embed that key in the token header, and `verify_token()` will accept the forged token as authentic. This bypasses the server HMAC secret entirely and permits arbitrary claim forgery, such as changing a user role to admin.",
+      "approach": "pattern_matching + exploit_reproduction",
+      "repro": "artifacts/repro/forge_header_k_hs256.py",
+      "evidence": "Running the repro prints `forged token accepted` followed by the verified payload containing `\"role\": \"admin\"` and `\"forged\": true`, proving that `verify_token()` accepted a token signed only with attacker-controlled key material.",
+      "references": [
+        "https://www.rfc-editor.org/rfc/rfc8725",
+        "https://www.rfc-editor.org/rfc/rfc7515.html"
+      ]
+    }
+  ]
+}

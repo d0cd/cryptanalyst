@@ -1,22 +1,52 @@
 #!/usr/bin/env bash
-# Usage: scripts/hunt-local <target-path> [--max-turns N]
+# Usage: scripts/hunt-local <target> [flags]
 #
 # Runs the harness directly (no Docker) using the local Claude Agent SDK.
-# Requires: claude CLI installed, Python venv at .venv/ with dependencies.
+# Mirrors scripts/hunt without the container — for fast iteration and to
+# use your local OAuth/Max-plan login (which can't be ported into Docker).
+#
+# Flags (subset of scripts/hunt — codex-specific and container-specific
+# flags are not applicable here):
+#   --mode NAME              default: hunt
+#   --model VENDOR_STRING    e.g. claude-sonnet-4-6; SDK default if unset
+#   --cycles N               default: 10
+#   --cycle-budget SEC       default: 600
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
 if [[ $# -lt 1 ]]; then
-    echo "Usage: $0 <target-path> [--max-turns N]" >&2
+    echo "Usage: $0 <target> [flags] (see comments at top)" >&2
     exit 1
 fi
 
-TARGET="$1"
-shift
+TARGET="$1"; shift
+
+MODE="hunt"
+MODEL=""
+CYCLES=""
+CYCLE_BUDGET=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --mode)           MODE="$2"; shift 2 ;;
+        --model)          MODEL="$2"; shift 2 ;;
+        --cycles)         CYCLES="$2"; shift 2 ;;
+        --cycle-budget)   CYCLE_BUDGET="$2"; shift 2 ;;
+        *) echo "Unknown flag: $1" >&2; exit 1 ;;
+    esac
+done
 
 if [[ ! -d "$TARGET" ]]; then
     echo "Target directory not found: $TARGET" >&2
+    exit 1
+fi
+
+TARGET_ABS="$(cd "$TARGET" && pwd)"
+TARGET_NAME="$(basename "$TARGET_ABS")"
+
+if [[ ! -d "$TARGET_ABS/code" ]]; then
+    echo "Target has no code/ subdirectory: $TARGET_ABS" >&2
     exit 1
 fi
 
@@ -27,10 +57,33 @@ else
     PYTHON=python3
 fi
 
-# Verify the SDK is importable
 if ! "$PYTHON" -c "import claude_agent_sdk" 2>/dev/null; then
     echo "claude_agent_sdk not found. Install with: uv pip install claude-agent-sdk" >&2
     exit 1
 fi
 
-exec "$PYTHON" -m runner.audit "$TARGET" --agent claude "$@"
+# Create the run directory with code/ symlinked in
+RUN_ID="$(date +%Y%m%d-%H%M%S)-${TARGET_NAME}-claude-local"
+RUN_DIR="runs/$RUN_ID"
+mkdir -p "$RUN_DIR"
+ln -s "$TARGET_ABS/code" "$RUN_DIR/code"
+[[ -f "$TARGET_ABS/audit.md" ]] && cp "$TARGET_ABS/audit.md" "$RUN_DIR/audit.md"
+
+GIT_SHA="$(git rev-parse --verify HEAD 2>/dev/null || echo unborn)"
+
+echo "Run: $RUN_DIR"
+echo "  Target: $TARGET_NAME"
+
+AUDIT_ARGS=(
+    --run-dir "$RUN_DIR"
+    --agent claude
+    --mode "$MODE"
+    --run-id "$RUN_ID"
+    --target-name "$TARGET_NAME"
+    --git-sha "$GIT_SHA"
+)
+[[ -n "$MODEL" ]]          && AUDIT_ARGS+=(--model "$MODEL")
+[[ -n "$CYCLES" ]]         && AUDIT_ARGS+=(--max-cycles "$CYCLES")
+[[ -n "$CYCLE_BUDGET" ]]   && AUDIT_ARGS+=(--cycle-budget "$CYCLE_BUDGET")
+
+exec "$PYTHON" -m runner.audit "${AUDIT_ARGS[@]}"

@@ -1,0 +1,23 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "bug_class": "ecdsa_biased_nonce_hidden_number_problem",
+      "severity": "CRITICAL",
+      "location": {
+        "file": "code/ecdsa.py",
+        "lines": [71, 85]
+      },
+      "summary": "The signer samples ECDSA nonces only from the 200-bit range [1, 2^200] on secp256k1, whose subgroup order is about 256 bits. Those fixed high zero bits turn each signature into a hidden-number-problem equation. With the provided signature corpus, a lattice reduction recovers the long-term private key, allowing an attacker to forge signatures for arbitrary messages.",
+      "approach": "pattern_matching + sage_modeling + exploit_reproduction",
+      "repro": "artifacts/repro/recover_private_key.sage",
+      "verification_artifact": "artifacts/sage/hnp_lattice_recovery.sage",
+      "evidence": "Running `sage artifacts/repro/recover_private_key.sage` recovers private key 0xdeadbeefcafebabe1234567890abcdef1234567890abcdeffeedface12345678 and reproduces the target signature's expected s value when signing the target message with k=1.",
+      "references": [
+        "https://research.ibm.com/publications/lattice-attacks-on-digital-signature-schemes",
+        "https://eprint.iacr.org/2020/728",
+        "https://eprint.iacr.org/2019/023"
+      ]
+    }
+  ]
+}

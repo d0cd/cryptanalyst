@@ -1,0 +1,21 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "bug_class": "predictable_time_seeded_prng_key_generation",
+      "severity": "CRITICAL",
+      "location": {
+        "file": "code/keygen.py",
+        "lines": [12, 13]
+      },
+      "summary": "generate_session_key reseeds Python's non-cryptographic random module with int(time.time()) on every call, then derives the 32-byte session key from that deterministic PRNG. An attacker who can estimate the generation time to within a few seconds can brute-force the timestamp seed and recover the exact key; calls made in the same second also repeat the same session key.",
+      "approach": "pattern_matching + exploit_reproduction",
+      "repro": "artifacts/repro/predict_time_seeded_key.py",
+      "evidence": "Running python3 artifacts/repro/predict_time_seeded_key.py recovered the exact observed 32-byte key after searching 11 candidate timestamp seeds and showed that a second same-second call produced the identical key.",
+      "references": [
+        "https://docs.python.org/3/library/secrets.html",
+        "https://docs.python.org/3/library/random.html"
+      ]
+    }
+  ]
+}

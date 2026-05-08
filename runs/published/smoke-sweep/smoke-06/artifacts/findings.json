@@ -1,0 +1,37 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "bug_class": "aes_ecb_pattern_leak",
+      "severity": "HIGH",
+      "location": {
+        "file": "code/hybrid.py",
+        "lines": [61, 63]
+      },
+      "summary": "The hybrid encryption layer uses AES-ECB for arbitrary-length messages. Within a single encrypted message, equal 16-byte plaintext blocks encrypt to equal ciphertext blocks under the per-message AES key, so message structure and repeated fields are visible to anyone who can observe the ciphertext.",
+      "approach": "pattern_matching, property_test, exploit_reproduction",
+      "repro": "artifacts/repro/ecb_pattern_leak.py",
+      "evidence": "Running the repro encrypts a plaintext whose first two AES blocks are equal and prints that ciphertext block 0 == block 1 is True while block 0 != block 2, proving the ciphertext leaks plaintext block equality.",
+      "references": [
+        "https://csrc.nist.gov/News/2022/proposal-to-revise-sp-800-38a",
+        "https://cryptography.io/en/latest/hazmat/primitives/symmetric-encryption/"
+      ]
+    },
+    {
+      "id": "F2",
+      "bug_class": "missing_ciphertext_authentication",
+      "severity": "HIGH",
+      "location": {
+        "file": "code/hybrid.py",
+        "lines": [61, 80]
+      },
+      "summary": "Ciphertexts are encrypted but never authenticated. Because ECB decrypts each block independently and decrypt() returns plaintext without a MAC or AEAD tag check, an attacker can reorder ciphertext blocks inside a captured blob and the recipient accepts the modified plaintext.",
+      "approach": "pattern_matching, property_test, exploit_reproduction",
+      "repro": "artifacts/repro/ecb_block_tamper.py",
+      "evidence": "Running the repro swaps the first two ciphertext blocks. decrypt() returns b'TO=ALICE________PAY=000000000000' for an original plaintext of b'PAY=000000000000TO=ALICE________' and raises no error.",
+      "references": [
+        "https://cryptography.io/en/latest/hazmat/primitives/symmetric-encryption/"
+      ]
+    }
+  ]
+}

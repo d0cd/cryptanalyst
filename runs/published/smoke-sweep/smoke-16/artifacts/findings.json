@@ -1,0 +1,36 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "bug_class": "ecdsa_zero_signature_acceptance",
+      "severity": "CRITICAL",
+      "location": {
+        "file": "code/ecdsa.py",
+        "lines": [93, 102]
+      },
+      "summary": "The ECDSA verifier accepts the malformed signature (r, s) = (0, 0) for every message and public key. ECDSA requires both r and s to be nonzero scalars in [1, n - 1], but the implementation admits zero in its range check and then explicitly returns true when both values are zero. In token authentication or software update validation, an attacker can bypass signature verification without knowing the private key.",
+      "approach": "pattern_matching + differential_test + exploit_reproduction",
+      "repro": "artifacts/repro/zero_signature_bypass.py",
+      "evidence": "Running the repro prints that the target accepts a valid signature, the reference library accepts the same valid signature, the target accepts the forged zero signature, and the reference library rejects the forged zero signature.",
+      "references": [
+        "https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.186-5.pdf"
+      ]
+    },
+    {
+      "id": "F2",
+      "bug_class": "ecdsa_missing_public_key_validation",
+      "severity": "HIGH",
+      "location": {
+        "file": "code/ecdsa.py",
+        "lines": [84, 108]
+      },
+      "summary": "The verifier accepts arbitrary public-key coordinates and performs elliptic-curve formulas on them without checking that the key is a valid P-256 point of the correct order. The malformed key (0, 0), which is not on P-256 and is rejected by a reference library, can be paired with a forged nonzero signature that the target accepts. This matters in systems that accept or register user-supplied verification keys, because an attacker can choose a malformed key and then satisfy verification without owning a corresponding P-256 private key.",
+      "approach": "pattern_matching + differential_test + exploit_reproduction",
+      "repro": "artifacts/repro/invalid_pubkey_forgery.py",
+      "evidence": "Running the repro shows that cryptography rejects the public key (0, 0), while the target accepts a forged nonzero (r, s) signature for that malformed key.",
+      "references": [
+        "https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-186.pdf"
+      ]
+    }
+  ]
+}

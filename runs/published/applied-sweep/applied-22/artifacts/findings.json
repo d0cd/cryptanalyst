@@ -1,0 +1,21 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "bug_class": "rsa_crt_fault_attack",
+      "severity": "HIGH",
+      "location": {
+        "file": "code/rsa_crt.py",
+        "lines": [29, 36]
+      },
+      "summary": "RSA CRT decryption returns the recombined CRT result without verifying it against the public exponent or otherwise checking consistency. If a single CRT branch is faulted, the returned value remains correct modulo one secret prime and incorrect modulo the other; the difference between a correct and a faulty output has a non-trivial GCD with n, immediately revealing a private prime factor and therefore the private key.",
+      "approach": "pattern_matching + exploit_reproduction",
+      "repro": "artifacts/repro/rsa_crt_fault_factor.py",
+      "evidence": "Running `python3 artifacts/repro/rsa_crt_fault_factor.py` prints `PASS: one faulty CRT output factors the RSA modulus`; in the observed run, `gcd(correct - faulty, n)` exactly matched the private q value returned by keygen.",
+      "references": [
+        "https://eprint.iacr.org/2012/553",
+        "https://eprint.iacr.org/2011/388"
+      ]
+    }
+  ]
+}

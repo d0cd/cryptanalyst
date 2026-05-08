@@ -1,0 +1,24 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "bug_class": "timing_sidechannel_mac_verification",
+      "severity": "HIGH",
+      "location": {
+        "file": "code/auth.py",
+        "lines": [9, 16]
+      },
+      "summary": "verify() compares the recomputed HMAC against the attacker-supplied tag with a Python `for` loop that returns False on the first mismatched byte (auth.py:13-15). Loop iteration count -- and therefore wall-clock latency -- is a function of how many leading bytes of the supplied tag match the secret expected tag. An attacker who can observe verify() response time (over the network, via a logging side-channel, or from any other latency oracle) can recover the 32-byte expected tag byte-by-byte at ~256 trials per byte, after which arbitrary message forgery is trivial. The textbook safe replacement is hmac.compare_digest(), which the standard library provides specifically for this use case. This is the well-documented Keyczar / Nate Lawson timing attack class.",
+      "tier": "2",
+      "reachability": "verify() is the public trust-boundary API; `tag` is attacker-controlled (HMAC inputs from network or untrusted callers always are). Tier 2 because exploitability requires the attacker to observe a latency oracle on verify (network round-trip time, response-handler instrumentation, etc.); given any such oracle the path from the attacker's bytes to the vulnerable comparison loop is direct and unconditional -- no additional gating checks exist between the API entry and auth.py:13-15.",
+      "approach": "pattern_matching+differential_test+exploit_reproduction",
+      "repro": "artifacts/repro/timing_attack.py",
+      "evidence": "Repro part 1 deterministically counts loop iterations: k leading correct bytes -> exactly k+1 iterations (1 for k=0, 2 for k=1, ..., 32 for k=31, and 32 for all-correct). Repro part 2 measures verify() latency over 20000 trials per family on the local host: tag with 0 leading bytes correct -> p25=875ns, median=959ns; tag with 31 leading bytes correct -> p25=1167ns, median=1292ns; delta = +292ns p25 / +333ns median, consistently positive across runs and well above per-call noise. Repro part 3 confirms hmac.compare_digest is the constant-time drop-in replacement and that the target's accept/reject decision is functionally correct -- the bug is purely the timing channel.",
+      "references": [
+        "https://codahale.com/a-lesson-in-timing-attacks/",
+        "https://docs.python.org/3/library/hmac.html#hmac.compare_digest",
+        "https://www.cs.rice.edu/~dwallach/pub/crosby-timing2009.pdf"
+      ]
+    }
+  ]
+}

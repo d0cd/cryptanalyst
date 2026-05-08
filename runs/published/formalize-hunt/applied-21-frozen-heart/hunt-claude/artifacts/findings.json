@@ -1,0 +1,114 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "bug_class": "kzg_no_pairings_trapdoor_exposed",
+      "severity": "CRITICAL",
+      "location": {
+        "file": "code/proof_system.py",
+        "lines": [22, 143]
+      },
+      "summary": "The construction is KZG-shaped but uses no pairings: the SRS is a list of raw field elements [s^0, s^1, ..., s^d] in F_P (P = 2^127 - 1), and verification computes lhs = (C - y) and rhs = pi * (s - z) directly in the field using srs.powers[1] = s in plaintext. Anyone who reads the SRS knows the trapdoor s, and can therefore forge a proof for any (C, z, y) by setting pi = (C - y) / (s - z) mod P. The hardcoded _SETUP_SECRET further makes s a fixed compile-time constant. The construction provides no computational binding or evaluation soundness whatsoever.",
+      "tier": "1",
+      "reachability": "Public API: any caller of trusted_setup() receives the SRS containing s in slot 1; trivially, any caller of the module reads _SETUP_SECRET directly. The forgery exploits only the public verify(srs, proof) function with attacker-controlled proof bytes.",
+      "approach": "spec_first_review + lean_stating + adversarial_reading",
+      "repro": "artifacts/repro/forge_F1_trapdoor.py",
+      "verification_artifact": "state/lean/Audit/PolyCommit/Trace.lean + state/lean/Audit/PolyCommit/State.lean",
+      "evidence": "Repro forges a valid proof for an arbitrary (C, z, y) the attacker invents (no honest polynomial), using only the public SRS. verify(srs, forged_proof) returns True. Cycle-3 Lean obstruction Trace.setup_ne_impl proves specSetup 17 ≠ implSetup 17 by native_decide; the spec loop body is two ops (recordPower + encodeInGroup) and the spec ends with destroyTrapdoor, while the impl loop is one op and has no destroyTrapdoor. firstDiff localizes the divergence at index 2 (encodeInGroup 0). Cycle-4 adds the complementary state-invariant State.impl_violates_invariant: trapdoorEverPublished implStep implOps = true by native_decide — at iteration i=1 the impl publishes srs.powers[1] = 17 (= trapdoor) into the SRS, which an external observer reads in the clear. The companion theorem State.impl_with_destroy_still_violates additionally proves D1 ≠ D4: even adding destroyTrapdoor at the end leaves the publishability defect intact (history-dependent invariant). Together: two orthogonal-layer machine-checked obstructions for F1, plus an independence-of-failures certificate.",
+      "references": [
+        "https://www.iacr.org/archive/asiacrypt2010/6477178/6477178.pdf",
+        "https://dankradfeist.de/ethereum/2020/06/16/kate-polynomial-commitments.html"
+      ]
+    },
+    {
+      "id": "F2",
+      "bug_class": "fiat_shamir_frozen_heart_missing_y_and_statement_id",
+      "severity": "HIGH",
+      "location": {
+        "file": "code/proof_system.py",
+        "lines": [99, 103]
+      },
+      "summary": "The Fiat-Shamir transcript built in `prove` (and re-built in `verify`) contains only [C, pi, z]. The claimed evaluation y and the statement_id (both prover-controlled public values that the verifier relies on) are NOT absorbed. Per the Trail of Bits 'Frozen Heart' rule, the FS hash must include all public values from the statement and proof; omitting y means the prover can change y after alpha is fixed without invalidating the transcript hash. (In this construction alpha is also unused in the algebraic check — see F3 — so the practical exploit chains through F1 anyway. The pattern itself is the canonical Frozen Heart signature.)",
+      "tier": "2",
+      "reachability": "Public API: prove() and verify() both build the same incomplete transcript at lines 99-103 and 129-133; an attacker who calls prove() and then mutates the proof's y field can survive verification when alpha equality is the only FS-derived check (here alpha-equality is necessary but the algebraic check ignores alpha — F3).",
+      "approach": "spec_first_review + lean_stating",
+      "repro": null,
+      "verification_artifact": "state/lean/Audit/PolyCommit/Trace.lean",
+      "evidence": "Trace.lean theorem `prove_open_ne_impl : specOpen ... ≠ implOpen ... := by native_decide` proves the spec-mandated transcript [statementTag, commitment, witness, point, claimedValue] is unequal to the impl's transcript [commitment, witness, point]. The accompanying `#eval firstDiff` localizes the divergence at the buildTranscript op (index 9 in the prove operation sequence). The spec-vs-impl independence is documented inline with /-! SpecSource -/ (Kate-Zaverucha-Goldberg 2010) and /- Source -/ (code/proof_system.py:74-114) blocks.",
+      "references": [
+        "https://blog.trailofbits.com/2022/04/13/part-1-coordinated-disclosure-of-vulnerabilities-affecting-girault-bulletproofs-and-plonk/",
+        "https://blog.trailofbits.com/2022/04/18/the-frozen-heart-vulnerability-in-plonk/"
+      ]
+    },
+    {
+      "id": "F3",
+      "bug_class": "decorative_fiat_shamir_challenge_unused_in_algebraic_check",
+      "severity": "HIGH",
+      "location": {
+        "file": "code/proof_system.py",
+        "lines": [135, 143]
+      },
+      "summary": "The Fiat-Shamir challenge alpha is recomputed at line 135 and equality-checked at line 136 against proof['alpha'], but it is NEVER used in any subsequent algebraic check: lines 141-143 compute lhs and rhs with no reference to alpha. The challenge is therefore decorative — it catches no attacker action that the algebraic check on its own does not already see. A correct NIZK-KZG verifier multiplies witness or LHS by alpha to randomize the check (e.g., for batched openings); without that, the entire Fiat-Shamir transformation is vacuous and could be removed without changing the verify() decision.",
+      "tier": "2",
+      "reachability": "Public API: any caller of verify() is subject to this; an attacker who forges (C, pi, z, y) using F1's trapdoor leak only needs to honestly recompute alpha = SHA256([C, pi, z]) and embed it in the proof. The alpha-equality check provides no protection against the F1 forger.",
+      "approach": "spec_first_review + lean_stating + adversarial_reading",
+      "repro": null,
+      "verification_artifact": "state/lean/Audit/PolyCommit/Trace.lean",
+      "evidence": "Trace.lean theorem `verify_ne_impl : specVerify ... ≠ implVerify ... := by native_decide` proves the spec-mandated verify sequence (which includes both `bindStatementId` and `useChallengeInCheck` ops between the FS recomputation and the algebraic check) is structurally unequal to the impl's sequence (which omits both). The companion `#eval firstDiff` localizes the divergence at index 4, the `bindStatementId` op. After re-aligning past that, the second divergence is at the spec's `useChallengeInCheck` op — finding F3 made machine-checkable. List-length lemma additionally certifies spec has 12 ops, impl has 10.",
+      "references": []
+    },
+    {
+      "id": "F4",
+      "bug_class": "statement_id_rebinding_no_domain_separation",
+      "severity": "MEDIUM",
+      "location": {
+        "file": "code/proof_system.py",
+        "lines": [113, 143]
+      },
+      "summary": "The proof dict carries a `statement_id` field (line 113), produced by the prover but never read by `verify` (line 117-143). An attacker who observes any honest proof can replay it with an arbitrary `statement_id`, and the verifier accepts. There is no protocol-binding between the proof and the statement it is supposed to attest. In any composition that relies on `statement_id` to scope proofs to a context (e.g., a session id or transaction id), the unrelated proof passes the gate.",
+      "tier": "1",
+      "reachability": "Public API: an attacker observes a single honest (proof, statement_id_1) pair on the network or storage; submits (proof, statement_id_2) for any statement_id_2 of choice. verify() accepts with no examination of statement_id.",
+      "approach": "spec_first_review + lean_stating",
+      "repro": "artifacts/repro/forge_F4_statement_rebinding.py",
+      "verification_artifact": "state/lean/Audit/PolyCommit/Trace.lean",
+      "evidence": "Trace.lean theorem `verify_ne_impl` localizes a divergence at index 4: spec has `bindStatementId proof.statementId` op; impl has `rebuildTranscript [...]` (skipping the bind). Repro takes one honest proof and shows verify() accepts it under any statement_id.",
+      "references": []
+    },
+    {
+      "id": "F5",
+      "bug_class": "missing_input_validation_panic_dos",
+      "severity": "LOW",
+      "location": {
+        "file": "code/proof_system.py",
+        "lines": [123, 143]
+      },
+      "summary": "verify() blindly serializes attacker-controlled fields of the proof dict via int.to_bytes(16, 'big') (lines 130-132) without any type or range check. Negative integers, integers >= 2^128, or non-int types raise OverflowError / AttributeError instead of being treated as invalid proofs. There are no preconditions on commitment, z, y, pi, or alpha; an attacker who can submit a proof dict can force verify() to raise. Distinct from F1-F4: this is a hygiene / panic-path defect orthogonal to the cryptographic soundness defects.",
+      "tier": "4",
+      "reachability": "Internal API only in the as-shipped library: verify() is a Python callable exposed to whatever wrapper imports it. There is no network or RPC surface in this repo. In any deployment that exposes verify() to attacker bytes (e.g. an unauthenticated RPC or a JSON-decoded transaction handler that forwards the dict to verify()), this elevates to tier 1 panic-DoS — a single malformed proof crashes the verifier process.",
+      "approach": "panic_path_audit + property_test + lean_stating",
+      "repro": "artifacts/repro/dos_F5_verify_panic.py",
+      "verification_artifact": "state/lean/Audit/PolyCommit/Robustness.lean",
+      "evidence": "Repro submits five malformed proofs (negative commitment; z >= 2^128; negative z; string commitment; pi >= 2^128). All five raise (OverflowError / AttributeError) instead of returning False. The crashes originate at lines 130-132 in the transcript-rebuild step, before any algebraic check is performed. A correct verifier would either reject malformed bytes early (return False) or reduce mod P before encoding; this verifier does neither. Robustness.lean (cycle 5, this run) encodes F5 as a Lean obstruction: `implVerifyOpt : RawProof → Option Bool` returns `none` (panic) on five `native_decide`-discharged ground witnesses (badNegC, badLargeZ, badNegZ, badLargePi, badNegPi); the spec-side `Proof : Type` is `Fp`-typed so `specRebuildTranscript : Proof → List (List UInt8)` is total. F5_independence theorem witnesses an attacker `RawProof` that fails `tryNormalize` (sound verifier would reject) yet causes `implVerifyOpt` to panic. A `goodInRange` falsifiability witness confirms the obstruction is content-driven.",
+      "references": []
+    },
+    {
+      "id": "F6",
+      "bug_class": "polynomial_commitment_binding_break_via_silent_truncation",
+      "severity": "MEDIUM",
+      "location": {
+        "file": "code/proof_system.py",
+        "lines": [52, 58]
+      },
+      "summary": "`commit(srs, poly)` iterates over `poly.coeffs` and silently skips coefficients whose index is >= len(srs.powers) (line 56: `if i < len(srs.powers): ...`). Two distinct polynomials that share their first `len(srs.powers)` coefficients but differ in higher-index coefficients commit to the same field element. This is a binding break in the polynomial-commitment primitive: an attacker can equivocate on which polynomial a given commitment is for, simply by extending or truncating the high-index coefficient list. The same root cause additionally breaks completeness: an honest prover whose polynomial has degree > SRS_MAX_DEGREE produces a proof that verify rejects (the 'lost' coefficients break the algebraic identity `f(s) - y = q(s)*(s-z)` in F_p). KZG's spec (Kate-Zaverucha-Goldberg 2010 §3.2) requires the commit operation to either restrict to deg(f) <= t or fail loudly; this impl does neither.",
+      "tier": "2",
+      "reachability": "Public API: any caller of commit() with attacker-influenced polynomial coefficients (e.g. a SNARK that commits to witness polynomials, or an aggregation protocol that combines attacker- and honest-supplied coefficients) is vulnerable. The collision pair is constructed from len(srs.powers) alone — never reading any srs.powers[i] value — so the attack works regardless of whether the SRS is in the clear (impl) or hidden in a group (spec). In as-shipped library form there is no protocol surface, identical to F5's tier-4-elevates-to-tier-1 profile; recorded as MEDIUM because the bug class (commitment binding) is more soundness-relevant than F5's hygiene defect.",
+      "approach": "adversarial_reading + property_test + lean_stating",
+      "repro": "artifacts/repro/binding_break_F6_commit_truncation.py",
+      "verification_artifact": "state/lean/Audit/PolyCommit/Binding.lean",
+      "evidence": "Repro constructs f1 = [5, 7, 11, ..., 149] (33 coeffs, indices 0..32) and f2 = f1.coeffs + [999, 12345, 88888888] (36 coeffs). commit(srs, f1) == commit(srs, f2) == 140540289814929310059115048847748716343. f1.evaluate(12345) != f2.evaluate(12345), confirming the polynomials are algebraically distinct. Additionally: prove(srs, f2, z=12345) returns a proof that verify() rejects, demonstrating the related completeness break for honest provers with degree > SRS_MAX_DEGREE. Lean obstruction Binding.commitTrunc_collides_poly1_poly2 proves `poly1 ≠ poly2 ∧ commitTrunc miniPowers poly1 = commitTrunc miniPowers poly2` by `native_decide`; the parametric theorem `commit_collides_any_2power_srs : ∀ (p0 p1 : Fp), commitTrunc [p0, p1] poly1 = commitTrunc [p0, p1] poly2` (proven by `simp`) certifies independence from F1: the collision survives any choice of SRS values, including the spec's hidden group elements.",
+      "references": [
+        "https://www.iacr.org/archive/asiacrypt2010/6477178/6477178.pdf"
+      ]
+    }
+  ]
+}

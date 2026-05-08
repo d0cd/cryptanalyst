@@ -1,0 +1,21 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "bug_class": "ambiguous_commitment_encoding",
+      "severity": "HIGH",
+      "location": {
+        "file": "code/commit.py",
+        "lines": [48, 55]
+      },
+      "summary": "The commitment hashes message || randomness directly and verification recomputes the same concatenation while accepting arbitrary randomness lengths. This does not bind the boundary between the committed message and the opening randomness: a malicious committer can choose randomness with a prefix that is later shifted into the message, allowing the same commitment to verify for two different messages without finding any SHA-256 collision.",
+      "approach": "pattern_matching, property_test, exploit_reproduction, web_research",
+      "repro": "artifacts/repro/F1_ambiguous_opening.py",
+      "evidence": "Running python3 artifacts/repro/F1_ambiguous_opening.py prints that the original opening message b'bid=1' verifies and a forged opening message b'bid=1000;winner=true' also verifies for the same commitment 46b08f7a310a7a336883, ending with 'BUG: one commitment opens to two different messages'.",
+      "references": [
+        "https://csrc.nist.gov/pubs/sp/800/185/final",
+        "https://nvlpubs.nist.gov/nistpubs/specialpublications/nist.sp.800-185.pdf"
+      ]
+    }
+  ]
+}

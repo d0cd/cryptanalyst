@@ -1,0 +1,37 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "bug_class": "ambiguous_mac_encoding",
+      "severity": "HIGH",
+      "location": {
+        "file": "code/tokens.py",
+        "lines": [18, 20]
+      },
+      "summary": "The HMAC input is built as purpose:user_id:expires without escaping, length-prefixing, or structured serialization. Because purpose and user_id are attacker-controlled strings, different logical token fields can produce the exact same signed byte string. A token issued for purpose='read' and user_id='alice:admin' therefore verifies unchanged after rewriting it to purpose='read:alice' and user_id='admin', which can bypass purpose or identity scoping checks that trust the verified token fields.",
+      "approach": "pattern_matching + exploit_reproduction",
+      "repro": "artifacts/repro/F1_delimiter_confusion.py",
+      "evidence": "Running the repro prints signed payload equal: True and forged verifies: True for two different logical (purpose, user_id) pairs sharing the same HMAC tag.",
+      "references": [
+        "https://cwe.mitre.org/data/definitions/347.html",
+        "https://kb.cert.org/vuls/id/475445/"
+      ]
+    },
+    {
+      "id": "F2",
+      "bug_class": "stale_hmac_key_after_rotation",
+      "severity": "MEDIUM",
+      "location": {
+        "file": "code/tokens.py",
+        "lines": [23, 43]
+      },
+      "summary": "The service key is captured as the default value of the _key parameters when issue_token() and verify_token() are defined. Reassigning _SERVICE_KEY for monthly rotation does not change those defaults, so default token issuance and verification continue using the old HMAC key. In a long-running process, a rotated or compromised key can remain active unexpectedly and tokens explicitly issued with the new module key are rejected by the default verifier.",
+      "approach": "pattern_matching + exploit_reproduction",
+      "repro": "artifacts/repro/F2_default_key_rotation.py",
+      "evidence": "Running the repro changes tokens._SERVICE_KEY, then shows pre-rotation token accepted after rotation: True, new default-issued token uses old key: True, and default verifier rejects explicit new key: True.",
+      "references": [
+        "https://docs.python.org/3/tutorial/controlflow.html#default-argument-values"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "bug_class": "diffie_hellman_invalid_subgroup_public_key",
+      "severity": "LOW",
+      "location": {
+        "file": "code/dh.py",
+        "lines": [37, 47]
+      },
+      "summary": "derive_shared only validates that the peer Diffie-Hellman public value is in the integer range [2, P-2]. For RFC 3526 group 14 with G = 2, valid public keys are in the order-Q subgroup and must also satisfy y^Q mod P == 1. The in-range value P-2 is outside that subgroup but is accepted; because P-2 == -G mod P, the returned hash reveals whether the server's reusable static private exponent is even or odd.",
+      "approach": "pattern_matching, differential_test, property_test, exploit_reproduction",
+      "repro": "artifacts/repro/invalid_subgroup_parity_leak.py",
+      "evidence": "Running the repro prints accepted_invalid_public=P-2, shows pow(P-2,Q,P)=P-1 rather than 1, and shows leaked_static_private_parity equals actual_static_private_parity.",
+      "references": [
+        "https://www.rfc-editor.org/rfc/rfc2785",
+        "https://csrc.nist.gov/pubs/sp/800/56/a/r3/final"
+      ]
+    }
+  ]
+}

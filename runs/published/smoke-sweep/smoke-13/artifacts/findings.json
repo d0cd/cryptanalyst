@@ -1,0 +1,32 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "bug_class": "authentication_bypass",
+      "severity": "HIGH",
+      "location": {
+        "file": "code/protocol.py",
+        "lines": [142, 146]
+      },
+      "summary": "The client-side receive path accepts any server_auth message without verifying transcript_mac. An attacker can send an arbitrary identity and an all-zero MAC, after which the client records the attacker-controlled identity, transitions to AUTHENTICATED, and can complete the handshake as ESTABLISHED.",
+      "approach": "pattern_matching + exploit_reproduction",
+      "repro": "artifacts/repro/forged_server_auth_bypass.py",
+      "evidence": "Running the repro prints that a forged server_auth with transcript_mac 0000... was accepted for identity attacker.example.com even though the real MAC for the same transcript had a different prefix, and client_finish was produced after the forged authentication.",
+      "references": []
+    },
+    {
+      "id": "F2",
+      "bug_class": "state_machine_bypass",
+      "severity": "HIGH",
+      "location": {
+        "file": "code/protocol.py",
+        "lines": [148, 150]
+      },
+      "summary": "The server-side receive path accepts client_finish in any current state and does not verify the finished MAC. A peer can send client_finish immediately after server_hello, before server_auth is sent, with an invalid all-zero finished value; the server still transitions to ESTABLISHED.",
+      "approach": "pattern_matching + exploit_reproduction",
+      "repro": "artifacts/repro/server_finish_state_bypass.py",
+      "evidence": "Running the repro prints that the server established before sending server_auth. The forged finished value is all zeroes and differs from the computed expected value for the same transcript, but process_message sets State.ESTABLISHED.",
+      "references": []
+    }
+  ]
+}

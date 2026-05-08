@@ -1,0 +1,37 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "bug_class": "unauthenticated_key_exchange",
+      "severity": "HIGH",
+      "location": {
+        "file": "code/exchange.py",
+        "lines": [34, 60]
+      },
+      "summary": "derive_keys accepts any 32-byte X25519 public key and derives session keys without authenticating the peer public key or binding it to a transcript or identity. An active network attacker can substitute their own public keys during the exchange, establish one shared key with Alice and a different shared key with Bob, decrypt Alice's traffic, then re-encrypt it to Bob while both endpoints continue normally.",
+      "approach": "pattern_matching + exploit_reproduction",
+      "repro": "artifacts/repro/mitm_unauthenticated_x25519.py",
+      "evidence": "Running the repro prints 'MITM succeeded', shows Alice and Bob do not share the same direct key, and shows Eve decrypting Alice's plaintext before forwarding a fresh ciphertext Bob accepts.",
+      "references": [
+        "https://www.rfc-editor.org/rfc/rfc7748",
+        "https://csrc.nist.gov/pubs/sp/800/56/a/r3/final"
+      ]
+    },
+    {
+      "id": "F2",
+      "bug_class": "missing_direction_binding",
+      "severity": "MEDIUM",
+      "location": {
+        "file": "code/exchange.py",
+        "lines": [46, 73]
+      },
+      "summary": "The protocol derives a single enc_key and uses it for both directions, and encrypt_message/decrypt_message pass no associated data to AES-GCM. As a result, ciphertexts are not bound to sender, receiver, direction, or message purpose: a valid Alice-to-Bob ciphertext can be replayed back to Alice and decrypts successfully as an inbound Bob-to-Alice message.",
+      "approach": "property_test + exploit_reproduction",
+      "repro": "artifacts/repro/reflection_no_direction_binding.py",
+      "evidence": "Running the repro prints 'reflection accepted' and demonstrates that the exact same AES-GCM blob decrypts successfully for Bob and for Alice when reflected back.",
+      "references": [
+        "https://csrc.nist.gov/pubs/sp/800/38/d/final"
+      ]
+    }
+  ]
+}

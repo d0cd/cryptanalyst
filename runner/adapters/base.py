@@ -20,6 +20,15 @@ class RunResult:
 class Adapter(Protocol):
     name: str
 
+    def setup(self, home: Path) -> None:
+        """Run-level setup: any one-time config writes go here, not in run().
+
+        Called once by the runner before the cycle loop starts. Keeps
+        per-cycle run() free of persistent state mutation so cycles
+        compose cleanly.
+        """
+        ...
+
     async def run(
         self,
         workdir: Path,

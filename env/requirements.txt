@@ -16,7 +16,14 @@ pytest==8.3.4
 # Agent SDKs
 anthropic==0.42.0
 openai==1.59.3
-claude-agent-sdk==0.1.0
+# Latest available on PyPI as of May 2026. The adapter only forwards
+# `model` / `max_budget_usd` to ClaudeAgentOptions when explicitly
+# requested via CLI flags, so older versions still work for the
+# default flow — but newer versions know more message types
+# (e.g. rate_limit_event, which 0.1.0 mis-handles).
+claude-agent-sdk==0.1.75
 
-# MCP framework
-mcp==1.2.0
+# MCP framework — bumped from 1.2.0 to satisfy claude-agent-sdk 0.1.75's
+# mcp>=1.19.0 dependency. Lean MCP server only uses mcp.server.fastmcp,
+# whose API is stable across this range.
+mcp==1.19.0

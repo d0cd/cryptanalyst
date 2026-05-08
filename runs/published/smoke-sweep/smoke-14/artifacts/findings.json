@@ -1,0 +1,36 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "bug_class": "rsa_no_padding",
+      "severity": "HIGH",
+      "location": {
+        "file": "code/rsa.py",
+        "lines": [20, 24]
+      },
+      "summary": "encrypt() applies the raw RSA primitive directly to the caller's integer message with no randomized encoding such as OAEP. This makes encryption deterministic and publicly testable, so low-entropy tokens can be recovered by encrypting guesses under the public key. The same multiplicative structure also lets an attacker transform a ciphertext into a valid ciphertext for a related plaintext.",
+      "approach": "pattern_matching + exploit_reproduction",
+      "repro": "artifacts/repro/repro_textbook_rsa_attack.py",
+      "evidence": "Running the repro recovers plaintext token 7319 by encrypting public guesses and shows decrypt(c * Enc(3) mod n) = 21957, exactly 7319 * 3.",
+      "references": [
+        "https://www.rfc-editor.org/rfc/rfc8017.html"
+      ]
+    },
+    {
+      "id": "F2",
+      "bug_class": "rsa_keygen_no_retry_when_e_not_coprime",
+      "severity": "LOW",
+      "location": {
+        "file": "code/rsa.py",
+        "lines": [10, 16]
+      },
+      "summary": "keygen() chooses p and q with nextprime(randbits(...)) and immediately computes d = e^-1 mod phi without checking gcd(e, phi) == 1 or retrying prime selection. A valid random candidate can yield a prime p congruent to 1 modulo e=65537, making phi divisible by e and causing key generation to raise ValueError instead of producing a key.",
+      "approach": "property_test + exploit_reproduction",
+      "repro": "artifacts/repro/repro_keygen_bad_residue.py",
+      "evidence": "Running the repro simulates randbits returning 917513; nextprime(917513) is 917519, which is 1 modulo 65537, and keygen raises ValueError: base is not invertible for the given modulus.",
+      "references": [
+        "https://www.rfc-editor.org/rfc/rfc8017.html"
+      ]
+    }
+  ]
+}

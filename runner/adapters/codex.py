@@ -2,11 +2,16 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import time
 from pathlib import Path
 
 from .base import RunResult
+
+
+# Default model for ChatGPT-account (Max plan) OAuth path. `gpt-5-codex`
+# would be more Codex-tuned but is gated to OPENAI_API_KEY auth. Override
+# with `--model` on scripts/hunt to pick something else.
+DEFAULT_CODEX_MODEL = "gpt-5.5"
 
 
 # Appended to $HOME/.codex/config.toml so the Lean MCP shows up in the
@@ -23,32 +28,32 @@ args = ["-m", "lean_mcp.server"]
 class CodexAdapter:
     name = "codex"
 
+    def setup(self, home: Path) -> None:
+        """Inject the Lean MCP server into the per-run config.toml.
+
+        Runs once at startup, after setup_auth() has copied the user's
+        host config.toml (if any) into $HOME/.codex/. We append rather
+        than overwrite so user-provided keys are preserved. Doing this
+        per-run instead of per-cycle prevents the section from being
+        appended N times and producing a `duplicate key` toml error.
+        """
+        codex_dir = home / ".codex"
+        codex_dir.mkdir(parents=True, exist_ok=True)
+        with (codex_dir / "config.toml").open("a") as f:
+            f.write(CODEX_MCP_TOML)
+
     async def run(
         self,
         workdir: Path,
         prompt: str,
         trace_path: Path,
+        model: str = "",
+        effort: str = "",
         **_kwargs,
     ) -> RunResult:
-        # `codex exec` has no max-turns equivalent; the kwarg is accepted
-        # for protocol parity and silently ignored.
-
-        # Inject our MCP server config into the per-run config.toml.
-        # setup_auth() in audit.py has already copied the user's host
-        # config.toml (if any) into $HOME/.codex/, so we append rather
-        # than overwrite to preserve user-provided keys.
-        home = Path(os.environ.get("HOME", "/home/audit"))
-        codex_dir = home / ".codex"
-        codex_dir.mkdir(parents=True, exist_ok=True)
-        config_path = codex_dir / "config.toml"
-        existing = config_path.read_text() if config_path.exists() else ""
-        config_path.write_text(existing + CODEX_MCP_TOML)
-
-        # Default to gpt-5.5 — the latest model the ChatGPT-account
-        # (Max plan) OAuth path supports. `gpt-5-codex` would be more
-        # Codex-tuned but is gated to OPENAI_API_KEY auth. Override
-        # with CODEX_MODEL if you want something else.
-        model = os.environ.get("CODEX_MODEL", "gpt-5.5")
+        # **_kwargs absorbs any future per-vendor knobs from the runner
+        # so adapters stay swap-compatible.
+        model = model or DEFAULT_CODEX_MODEL
 
         cmd = [
             "codex", "exec",
@@ -60,9 +65,13 @@ class CodexAdapter:
             "--dangerously-bypass-approvals-and-sandbox",
             "--cd", str(workdir),
             "--model", model,
-            "--json",
-            prompt,
         ]
+        # Codex CLI's reasoning-effort knob: low | medium (default) | high | xhigh.
+        # Set via `--config model_reasoning_effort=<level>` so it overrides any
+        # default in ~/.codex/config.toml without mutating the file.
+        if effort:
+            cmd += ["--config", f'model_reasoning_effort="{effort}"']
+        cmd += ["--json", prompt]
 
         start = time.time()
         proc = await asyncio.create_subprocess_exec(
@@ -71,16 +80,39 @@ class CodexAdapter:
             stderr=asyncio.subprocess.STDOUT,
         )
 
-        with open(trace_path, "wb") as trace:
-            assert proc.stdout is not None
-            while True:
-                line = await proc.stdout.readline()
-                if not line:
-                    break
-                trace.write(line)
-                trace.flush()
+        # Codex emits one JSON event per line, but a single line can be
+        # arbitrarily long — `command_execution.aggregated_output` carries
+        # whole `find` / `cat` outputs and easily blows past asyncio's
+        # 64KB default `readline` limit. Read raw chunks and split on
+        # newlines ourselves so any line length works.
+        try:
+            with open(trace_path, "wb") as trace:
+                assert proc.stdout is not None
+                buffer = b""
+                while True:
+                    chunk = await proc.stdout.read(65536)
+                    if not chunk:
+                        if buffer:
+                            trace.write(buffer)
+                            trace.flush()
+                        break
+                    buffer += chunk
+                    while b"\n" in buffer:
+                        line, buffer = buffer.split(b"\n", 1)
+                        trace.write(line + b"\n")
+                        trace.flush()
+            rc = await proc.wait()
+        except asyncio.CancelledError:
+            # Per-cycle wall-clock fired (or other cancellation). Reap
+            # the subprocess so it doesn't leak into the next cycle.
+            proc.terminate()
+            try:
+                await asyncio.wait_for(proc.wait(), timeout=5)
+            except asyncio.TimeoutError:
+                proc.kill()
+                await proc.wait()
+            raise
 
-        rc = await proc.wait()
         return RunResult(
             success=rc == 0,
             duration_seconds=time.time() - start,

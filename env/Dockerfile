@@ -62,18 +62,29 @@ RUN npm install -g \
     @anthropic-ai/claude-code@2.1.128 \
     @openai/codex@0.128.0
 
+# --- Rust toolchain (for analyzing Rust crypto codebases like snarkVM) ---
+# Installed under /opt so the non-root runtime user can read it. CARGO_HOME
+# and RUSTUP_HOME are world-writable so rustup can fetch toolchains pinned
+# by a target's rust-toolchain.toml on first `cargo` invocation.
+ENV RUSTUP_HOME=/opt/rustup
+ENV CARGO_HOME=/opt/cargo
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+    | sh -s -- -y --default-toolchain stable --profile minimal --no-modify-path \
+ && chmod -R a+w /opt/rustup /opt/cargo
+ENV PATH="/opt/cargo/bin:${PATH}"
+
 # --- Lean MCP server ---
 COPY mcp_servers/lean /opt/lean-mcp
 RUN cd /opt/lean-mcp && pip install --break-system-packages -e .
 
 # Let the runtime user write multi-file Lean projects into the workspace
-# and run `lake build`. We chmod both the source tree (CryptoAudit/) and
+# and run `lake build`. We chmod both the source tree (Audit/) and
 # the build output paths under .lake/. Mathlib's cached artifacts in
 # .lake/packages/ stay alone — lake only writes new modules under
-# .lake/build/{lib,ir}/CryptoAudit/, which is where the +w needs to apply.
+# .lake/build/{lib,ir}/Audit/, which is where the +w needs to apply.
 # The container runs as the host UID via `--user` (set by scripts/hunt);
 # we don't bake in a runtime user here.
-RUN chmod -R a+w /opt/lean-workspace/CryptoAudit \
+RUN chmod -R a+w /opt/lean-workspace/Audit \
                   /opt/lean-workspace/.lake/build
 
 SHELL ["/bin/bash", "-c"]

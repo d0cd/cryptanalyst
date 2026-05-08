@@ -1,0 +1,21 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "bug_class": "aes_gcm_nonce_reuse",
+      "severity": "HIGH",
+      "location": {
+        "file": "code/wrap.py",
+        "lines": [33, 64]
+      },
+      "summary": "The wrapper deterministically derives the AES-GCM nonce from (password, salt), and rewrap() preserves the salt supplied inside the input blob. Two valid blobs with the same salt rewrapped to the same new password therefore encrypt under the same AES-GCM key and nonce. GCM then reuses the CTR keystream, so an observer can XOR the ciphertext bodies to recover XOR of the wrapped secrets, and the authentication security assumptions for GCM are also violated.",
+      "approach": "pattern_matching + property_test + exploit_reproduction",
+      "repro": "artifacts/repro/rewrap_nonce_reuse.py",
+      "evidence": "Running the repro prints identical salt reuse for two rewrapped blobs and shows xor(ciphertexts) exactly equals xor(plaintexts), ending with 'BUG: rewrap reused the AES-GCM keystream under the new password'.",
+      "references": [
+        "https://csrc.nist.gov/pubs/sp/800/38/d/final",
+        "https://www.rfc-editor.org/rfc/rfc5116"
+      ]
+    }
+  ]
+}

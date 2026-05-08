@@ -1,0 +1,21 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "bug_class": "cbc_padding_oracle",
+      "severity": "HIGH",
+      "location": {
+        "file": "code/oracle.py",
+        "lines": [62, 76]
+      },
+      "summary": "decrypt() exposes a CBC padding oracle because it decrypts attacker-controlled ciphertext, checks PKCS#7 padding before authenticating the message, and propagates PaddingError separately from MacError. An adaptive attacker can modify the IV or previous ciphertext block and use the PaddingError vs MacError distinction to recover plaintext blocks byte-by-byte without knowing ENC_KEY or MAC_KEY.",
+      "approach": "pattern_matching + exploit_reproduction",
+      "repro": "artifacts/repro/padding_oracle_recover.py",
+      "evidence": "Running artifacts/repro/padding_oracle_recover.py recovers recovered_plaintext_ascii=FLAG{padding-oracle-recovered-via-vaudenay}, prints the recovered embedded HMAC, and verifies oracle.decrypt(original) matches the recovered plaintext.",
+      "references": [
+        "https://www.jaist.ac.jp/~fujisaki/2019/Vaudenay-EU02-CBC-PaddingOracle.pdf",
+        "https://infoscience.epfl.ch/entities/publication/60268d2e-9c20-4d4f-9c85-6fff38c5454f"
+      ]
+    }
+  ]
+}

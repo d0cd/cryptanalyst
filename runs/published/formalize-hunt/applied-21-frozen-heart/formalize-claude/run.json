@@ -1,0 +1,48 @@
+{
+  "run_id": "20260508-041820-applied-21-claude-local",
+  "target_name": "applied-21",
+  "agent": "claude",
+  "mode": "formalize",
+  "model": null,
+  "effort": null,
+  "started_at": "2026-05-08T04:18:20.689075+00:00",
+  "duration_seconds": 2696.72,
+  "cycles": 5,
+  "max_cycles": 5,
+  "cycle_budget_seconds": 600,
+  "cycle_log": [
+    {
+      "cycle": 1,
+      "status": "timeout",
+      "duration_seconds": 605.39,
+      "error": null
+    },
+    {
+      "cycle": 2,
+      "status": "timeout",
+      "duration_seconds": 605.34,
+      "error": null
+    },
+    {
+      "cycle": 3,
+      "status": "completed",
+      "duration_seconds": 407.33,
+      "error": null
+    },
+    {
+      "cycle": 4,
+      "status": "completed",
+      "duration_seconds": 473.39,
+      "error": null
+    },
+    {
+      "cycle": 5,
+      "status": "timeout",
+      "duration_seconds": 605.27,
+      "error": null
+    }
+  ],
+  "n_findings": 4,
+  "image_digest": "unknown",
+  "git_sha": "14e0e953431690688c69aaf1928071e38bf56140"
+}

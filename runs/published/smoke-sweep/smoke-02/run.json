@@ -1,0 +1,35 @@
+{
+  "run_id": "20260508-033543-smoke-02-claude-local",
+  "target_name": "smoke-02",
+  "agent": "claude",
+  "mode": "hunt",
+  "model": null,
+  "started_at": "2026-05-08T03:35:43.643642+00:00",
+  "duration_seconds": 955.09,
+  "cycles": 3,
+  "max_cycles": 3,
+  "cycle_budget_seconds": 600,
+  "cycle_log": [
+    {
+      "cycle": 1,
+      "status": "completed",
+      "duration_seconds": 219.19,
+      "error": null
+    },
+    {
+      "cycle": 2,
+      "status": "completed",
+      "duration_seconds": 130.56,
+      "error": null
+    },
+    {
+      "cycle": 3,
+      "status": "timeout",
+      "duration_seconds": 605.34,
+      "error": null
+    }
+  ],
+  "n_findings": 1,
+  "image_digest": "unknown",
+  "git_sha": "14e0e953431690688c69aaf1928071e38bf56140"
+}

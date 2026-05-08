@@ -17,5 +17,42 @@ runs/*
 targets/private/*
 !targets/private/.gitkeep
 
+# Production targets — real-world third-party codebases. Their code/, state/,
+# and lake-cache contain upstream symbols and per-target audit notes; keep
+# them local. Re-enable specific subtrees if you want to publish a finding's
+# repro under runs/published/ instead.
+targets/production/
+
+# Per-target runtime state (durable Lean tree + Sage scripts the agent
+# builds while auditing applied/blind targets). Not source — runtime output.
+targets/applied/*/state/
+targets/applied/*/.lake-cache/
+targets/blind/*/state/
+targets/blind/*/.lake-cache/
+
+# Cargo build cache from running findings repros locally (contains upstream
+# crate fingerprints).
+.repro-target/
+.repro-target-full/
+**/.cargo-target/
+
+# Workspace scratch under env/lean_workspace — durable target work belongs
+# in <target>/state/lean/, not here.
+env/lean_workspace/Audit/
+env/lean_workspace/CryptoAudit/
+
+# Per-target snapshot worktrees (created by `scripts/hunt --snapshot`).
+**/.snapshots/
+
+# Third-party Lean skills (vendored clones, mounted into container)
+env/lean-skills/
+env/lean4-skills/
+
 # OS
 .DS_Store
+
+# Editor / IDE local
+.vscode/
+.idea/
+*.swp
+*.swo

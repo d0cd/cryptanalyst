@@ -1,0 +1,14 @@
+{
+  "run_id": "20260505-120755-oprf-login-codex",
+  "target_name": "oprf-login",
+  "agent": "codex",
+  "mode": "hunt",
+  "max_turns": 100,
+  "started_at": "2026-05-05T16:07:55.767290+00:00",
+  "duration_seconds": 200.25,
+  "exit_reason": "completed",
+  "error": null,
+  "n_findings": 3,
+  "image_digest": "sha256:06589a66897d0c5e503133eb460bc2249da65d68824d2c5f931a7b335965a420",
+  "git_sha": "unborn"
+}

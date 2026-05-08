@@ -68,7 +68,7 @@ docs/                 ─ this document and roadmap
 env/                  ─ Dockerfile, requirements.txt, Lean workspace
 mcp_servers/lean/     ─ Lean REPL wrapped as MCP tools
 instructions/         ─ AGENTS.md (loaded as agent system prompt)
-prompts/              ─ hunt.md, formal.md (per-mode user prompts)
+prompts/              ─ hunt.md (per-mode user prompts)
 runner/
   audit.py            ─ entrypoint
   adapters/{claude,codex}.py
@@ -104,13 +104,15 @@ launching the container, then bind-mounts only that directory as the
 agent's writable workspace. The agent cannot see prior runs; otherwise
 it could trivially copy past findings, reproductions, and traces.
 
-### 4.3 Open network, locked package install
+### 4.3 Open network, open package install
 
 The container has unrestricted outbound network so the agent can
-research CVEs, papers, and advisories. But `pip`/`npm`/`apt` are
-disabled at image build time — `python3 -m pip install requests` must
-fail. The combination is the safety story: research yes, arbitrary
-code execution no. Both halves are load-bearing; do not remove either.
+research CVEs, papers, and advisories. Package managers (`pip`, `npm`,
+`apt`) are available at runtime so the agent can install target
+dependencies and analysis tools. The container is ephemeral — installs
+don't persist beyond the run. The safety boundary is the container
+itself (resource limits, tmpfs HOME, no host mounts beyond the run dir
+and target code).
 
 ### 4.4 Pinned agent CLI versions
 
@@ -121,18 +123,47 @@ under both agents before merging.
 
 ### 4.5 Auth strategy differs by agent
 
-- **Claude.** Max-plan OAuth lives in the macOS Keychain and isn't
-  portable to a Linux container; the `claude` CLI's non-interactive
-  modes never read OAuth or the keychain. So `ANTHROPIC_API_KEY` is
-  required (Max-plan members can generate one that bills against the
-  Max quota).
-- **Codex.** `~/.codex/auth.json` is a real file holding a ChatGPT-account
-  OAuth token, so we mount it RO at `/auth_src` and let the runner copy
-  it into a writable tmpfs `HOME` at run start. Host file stays
-  immutable. Falls back to `OPENAI_API_KEY` if the token isn't present.
+- **Claude.** Two env-var paths, no file mounting. The short-lived
+  OAuth tokens in `~/.claude/.credentials.json` (what the local
+  `claude` CLI uses, and what tools like `claude-creds` materialize
+  from the macOS Keychain) expire in ~10-15 minutes and can't be
+  refreshed non-interactively, so mounting that file into the
+  container is a dead end. Instead:
+  - **`CLAUDE_CODE_OAUTH_TOKEN`** — long-lived (1-year) token minted
+    via `claude setup-token` on the host. Bills against Max-plan
+    quota for Max members. Preferred when present.
+  - **`ANTHROPIC_API_KEY`** — console-issued API key. Bills at
+    per-token API pricing, **separate** from any Max-plan subscription.
+
+  `scripts/hunt` prefers the OAuth token over the API key when both
+  are set on the host, and forwards *only one* of them into the
+  container. This matters because Claude Code's own resolution order
+  prefers `ANTHROPIC_API_KEY` if it sees both — which would silently
+  switch billing from "consumed Max quota" to "fresh per-token API
+  charges", a footgun worth avoiding. `scripts/hunt-local` bypasses Docker and uses the host
+  CLI's normal OAuth path directly — it doesn't need either env var.
+
+- **Codex.** `~/.codex/auth.json` is a real file holding a
+  ChatGPT-account OAuth token that the codex CLI **auto-refreshes**,
+  so we mount it RO at `/auth_src` and let the runner copy it into a
+  writable tmpfs `HOME` at run start. Host file stays immutable.
+  Falls back to `OPENAI_API_KEY` if the token isn't present.
 
 The asymmetry is irreducible — it reflects how each vendor packages
-auth — and is documented in comments next to the code in `scripts/hunt`.
+auth and refresh — and is documented in comments next to the code in
+`scripts/hunt`.
+
+**Security caveats baked into the design.** Token lifetime is fixed
+per vendor (1y for Claude OAuth, undocumented for Codex), with no
+flag to issue shorter-lived tokens. Anthropic `sk-ant-*` API keys
+are recognized by GitHub's secret-scanning partner program; OAuth
+tokens are not. Anthropic's console allows revocation of API keys
+but has no documented UI for revoking individual `CLAUDE_CODE_OAUTH_TOKEN`
+values. The harness counters all of this with three layers: the
+`scrub-secrets` post-run scanner catches leakage into artifacts, the
+`runs/*` gitignore prevents accidental commits, and credentials are
+only ever passed as env vars (never on a command line where `ps`
+could observe them).
 
 ### 4.6 Run identity passed as CLI args, not env
 
@@ -179,7 +210,66 @@ non-zero on hit. API keys live only in the running container's memory,
 but a confused agent could write one into `notes.md`. The scan is
 small; do not skip it.
 
-### 4.11 Container memory of the agent's HOME
+### 4.11 Layered budget model
+
+Five plausible budget knobs, three layers, one knob per layer:
+
+| Layer | Knob | Enforced by | Catches |
+|---|---|---|---|
+| Investigation depth | `--cycles N` | Runner loop | "How much work" — primary control |
+| Per-cycle wall-clock | `--cycle-budget SEC` | `asyncio.wait_for` inside the runner | One stuck cycle |
+| Container hard-kill | `--timeout SEC` | `timeout(1)` around `docker run` | Wedged container ignoring asyncio cancellation |
+
+Each layer is the only mechanism that catches its failure mode. Combining
+them under "wall-clock budget" hides which one tripped. We deliberately
+do *not* expose a `--overall-budget` knob: `cycles × cycle-budget` already
+implies a soft total, and `--timeout` is the hard backstop.
+
+No model-side caps live on top of the three layers. The Claude SDK's
+`max_turns` defaults to `None` (unbounded) and is left at that — the
+`asyncio.wait_for` cycle-budget is the real per-cycle limit, and
+adding an iteration cap on top only obscures which limit tripped.
+Cost is bounded implicitly by `cycles × cycle-budget × API-rate`,
+not by a separate spend cap.
+
+### 4.12 Uniform `--model` and `--effort` flags
+
+`scripts/hunt --model VENDOR_STRING` is passed unchanged to whichever
+adapter is active. Each adapter resolves it vendor-side: Claude sets
+`ClaudeAgentOptions.model`; Codex passes it as `codex exec --model`.
+There is no aliasing or validation — `--model sonnet` is not normalized
+to `claude-sonnet-4-6`. The asymmetry in default behavior matters:
+Claude omitted = SDK default; Codex omitted = `gpt-5.5` baked into the
+adapter (the latest model the ChatGPT-account OAuth path supports).
+
+`--effort LEVEL` (low | medium | high | xhigh | max) follows the same
+pattern: same flag, different vendor mapping. Codex receives it as
+`codex exec --config model_reasoning_effort="<level>"`; Claude receives
+it as `ClaudeAgentOptions.effort`. Higher levels generally produce
+better adversarial reasoning (formalize Substance work, hunt deep code
+reading) at the cost of longer per-cycle wall-clock. Pair with a
+correspondingly higher `--cycle-budget` (e.g. `--effort xhigh
+--cycle-budget 1200`) so deep cycles don't get cut off mid-tool-use.
+
+### 4.13 Snapshot mode for parallel runs
+
+`scripts/hunt --snapshot` creates a `git worktree` of the target's
+`state/` pinned at the current HEAD, then mounts that worktree (not
+the live state) into the container. A hunt run with `--snapshot` and
+a formalize run on the same target's live state can execute in
+parallel without conflicting on `/repo/state`: formalize keeps writing
+to `<target>/state/` (HEAD advances), hunt sees a frozen snapshot.
+
+The worktree lives at `<target>/.snapshots/<run-id>/`. On run exit, if
+the worktree's HEAD differs from the snapshot ref (the agent committed
+something), the worktree is preserved and the operator gets a
+`git merge <commit>` instruction; otherwise it's removed silently.
+
+`max_turns` defaults to `None` (per the SDK), so the only per-cycle
+limit is `--cycle-budget`. This keeps the budget surface to three
+flags (cycles / cycle-budget / timeout) regardless of effort level.
+
+### 4.14 Container memory of the agent's HOME
 
 The container is launched with `--user $(id -u):$(id -g)` and a tmpfs
 `/home/audit` (size 128M, owned by that uid). The agent's HOME is
@@ -225,10 +315,13 @@ and put observations in `notes.md`.
   is fine; an abstract framework is not.
 - Restrict the container's network. The agent's web research is
   essential to the goal-directed approach.
-- Skip the package-manager lockdown. It's what makes the open-network
-  policy safe.
 - Skip `scrub-secrets`. Small cost, high downside if missed.
 - Bind-mount `HUMANS.md` or any sibling of `code/`. The anonymization
   story depends on the agent only seeing `code/`.
 - Run multiple hunts concurrently against the same image (Lean
   workspace is shared).
+- Add a budget knob without showing where it slots into the three-layer
+  model in §4.11. Five overlapping budget flags is what we just removed.
+- Reintroduce env vars for operator knobs. Credentials stay as env vars
+  (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`) because they belong on no
+  command line; everything else is a flag on `scripts/hunt`.

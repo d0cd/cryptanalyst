@@ -1,0 +1,21 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "bug_class": "unconstrained_circuit",
+      "severity": "CRITICAL",
+      "location": {
+        "file": "code/circuit.py",
+        "lines": [84, 87]
+      },
+      "summary": "The ASSERT_EQ branch of `evaluate` checks `w[gate.left] != w[gate.left]` instead of `w[gate.left] != w[gate.right]`. The inequality is the tautology `x != x`, so every ASSERT_EQ gate is unconditionally accepted regardless of the values on its declared wires. This makes any circuit that uses `assert_equal` to bind values (e.g. binding a computed output wire to a public-input wire) effectively unconstrained — a malicious prover can submit a witness with arbitrary values on those wires and the verifier returns True.",
+      "tier": "1",
+      "reachability": "Network-reachable: `evaluate(circuit, witness)` is the public verifier API; the witness is fully attacker-controlled. The canonical `build_hash_preimage_circuit()` uses `assert_equal(4, 5)` to bind the computed output wire to a public-input wire, so any consumer that calls `evaluate` to validate a prover-submitted witness is directly affected.",
+      "approach": "spec_first_review + lean_stating + exploit_reproduction",
+      "repro": "artifacts/repro/F1_assert_eq_unconstrained.py",
+      "verification_artifact": "state/lean/Audit/Circuit/Equiv.lean",
+      "evidence": "Running `python3 artifacts/repro/F1_assert_eq_unconstrained.py` shows `evaluate` returning True on the forged witness `[3, 5, 15, 18, 23, 42]`, where wire[4]=23 and wire[5]=42 disagree even though the circuit declares `assert_equal(4, 5)`. The Lean file `state/lean/Audit/Circuit/Equiv.lean` substantiates the same divergence at the per-gate level: `Spec.checkGate (.assertEq 0 1) [0,1] = false` and `Impl.checkGate (.assertEq 0 1) [0,1] = true`, both proven by `native_decide`, and the protocol-level theorem `hashPreimage_soundness_break` discharges by `native_decide` to confirm `Spec.evaluate` rejects the forged witness while `Impl.evaluate` accepts it.",
+      "references": []
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "bug_class": "sha256_secret_prefix_mac_length_extension",
+      "severity": "HIGH",
+      "location": {
+        "file": "code/mac.py",
+        "lines": [8, 13]
+      },
+      "summary": "The MAC is computed as SHA256(key || message). SHA-256 is a Merkle-Damgard hash, so its digest can be reused as the internal chaining state for a length-extension attack. An attacker who sees a valid message/tag pair and can guess or know the key length can append chosen bytes to the message and compute a valid tag for the extended byte string without knowing the secret key.",
+      "approach": "pattern_matching + exploit_reproduction",
+      "repro": "artifacts/repro/sha256_length_extension.py",
+      "evidence": "The repro obtains a tag for b'transfer:alice->bob:100', appends b';admin=true;transfer:alice->attacker:900', tries plausible key lengths, computes the forged SHA-256 continuation from the observed digest, and code.mac.verify(secret_key, forged_message, forged_tag) returns True for key length 16.",
+      "references": [
+        "https://www.rfc-editor.org/rfc/rfc2104",
+        "https://en.wikipedia.org/wiki/Length_extension_attack"
+      ]
+    }
+  ]
+}

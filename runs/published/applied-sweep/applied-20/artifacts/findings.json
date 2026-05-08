@@ -1,0 +1,36 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "bug_class": "trapdoor_exposed_arbitrary_opening",
+      "severity": "CRITICAL",
+      "location": {
+        "file": "code/kzg.py",
+        "lines": [120, 128]
+      },
+      "summary": "The verifier equation is implemented over public field elements, so the SRS directly reveals the trapdoor scalar as srs.powers[1]. For any commitment C, point z where z != s, and arbitrary claimed value y, an attacker can compute pi = (C - y) / (s - z) mod P and pass verify_eval(). This destroys KZG binding: commitments can be opened to values unrelated to the committed polynomial.",
+      "approach": "pattern_matching + exploit_reproduction",
+      "repro": "artifacts/repro/forge_arbitrary_opening.py",
+      "evidence": "Running the repro commits to f(x)=3x^3+2x^2+x+5, whose true value at z=7 is 1139, then forges a proof for y=123457928. verify_eval() returns True for the forged value.",
+      "references": [
+        "https://www.zkdocs.com/docs/zkdocs/commitments/kzg_polynomial_commitment/"
+      ]
+    },
+    {
+      "id": "F2",
+      "bug_class": "degree_bound_truncation",
+      "severity": "HIGH",
+      "location": {
+        "file": "code/kzg.py",
+        "lines": [81, 87]
+      },
+      "summary": "commit() silently ignores polynomial coefficients whose indexes exceed len(srs.powers)-1 instead of rejecting polynomials above the SRS degree bound. As a result, distinct polynomials can have identical commitments while evaluating differently at the same point. A verifier can accept an opening for the truncated lower-degree polynomial as an opening of the too-high-degree polynomial's commitment.",
+      "approach": "property_test + exploit_reproduction",
+      "repro": "artifacts/repro/truncated_degree_collision.py",
+      "evidence": "Running the repro with max_degree=4 shows commit(9) == commit(9 + x^5), while at z=2 the evaluations are 9 and 41. A proof for the value 9 verifies against the commitment returned for 9 + x^5.",
+      "references": [
+        "https://www.zkdocs.com/docs/zkdocs/commitments/kzg_polynomial_commitment/"
+      ]
+    }
+  ]
+}

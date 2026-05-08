@@ -1,0 +1,76 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "bug_class": "fixed_iv_cbc_deterministic_encryption",
+      "severity": "MEDIUM",
+      "location": {
+        "file": "code/cipher.py",
+        "lines": [4, 16]
+      },
+      "summary": "AES-CBC is initialized with a hardcoded all-zero IV (`IV = b'\\x00' * 16` at cipher.py:4) reused on every call to `encrypt`. CBC under a fixed IV is deterministic: the same plaintext under the same key produces byte-identical ciphertext. This breaks IND-CPA security — an observer can detect when identical plaintexts are encrypted, and can verify candidate plaintexts against a captured ciphertext. The in-source comment justifies the fixed IV with 'needed for caching', so this is an intentional design choice — but it is incompatible with confidentiality of low-entropy or repeated messages.",
+      "tier": "1",
+      "reachability": "Public API: any caller of `encrypt(key, plaintext)` produces ciphertext under the fixed IV. No intermediate validation. An attacker who observes two ciphertexts can compare them byte-for-byte to test plaintext equality.",
+      "approach": "pattern_matching + exploit_reproduction",
+      "repro": "artifacts/repro/fixed_iv_determinism.py",
+      "evidence": "Running the repro shows that encrypt(KEY, P) == encrypt(KEY, P) byte-for-byte (`634ec0357d595860...`), and that a different plaintext produces a different ciphertext. Determinism confirmed.",
+      "references": [
+        "https://csrc.nist.gov/glossary/term/initialization_vector",
+        "NIST SP 800-38A §6.2 — CBC IV uniqueness requirement"
+      ]
+    },
+    {
+      "id": "F2",
+      "bug_class": "unauthenticated_cbc_malleability",
+      "severity": "HIGH",
+      "location": {
+        "file": "code/cipher.py",
+        "lines": [15, 20]
+      },
+      "summary": "`decrypt(key, ciphertext)` performs raw AES-CBC decryption (cipher.py:15-20) with no MAC, no AEAD tag, and no integrity check. CBC malleability lets an attacker who can modify ciphertext bytes flip arbitrary bits in plaintext block i by XORing the desired delta into ciphertext block i-1: P'_i = AES_dec(C_i) XOR C'_{i-1} = P_i XOR delta. The decrypt routine accepts the tampered ciphertext silently and returns the attacker-chosen plaintext for the targeted block. There is no way for a legitimate caller to detect the forgery.",
+      "tier": "1",
+      "reachability": "Public API: any caller passing attacker-controlled or attacker-tampered bytes to `decrypt` will receive whatever the attacker engineered. Combined with F1's deterministic IV, the attacker can also predict/replicate the ciphertext landscape.",
+      "approach": "pattern_matching + exploit_reproduction",
+      "repro": "artifacts/repro/cbc_malleability.py",
+      "evidence": "The repro encrypts the 32-byte plaintext `b'transfer 0000100USD to alice!!!!'` and forges a ciphertext that decrypts to `<garbled>USD to mallory!!`. Block 2 was rewritten exactly from `b'USD to alice!!!!'` to `b'USD to mallory!!'` by XOR-ing a 16-byte delta into ciphertext block 1. `decrypt` returned successfully — no exception, no tag check, no MAC.",
+      "references": [
+        "Vaudenay (2002), 'Security Flaws Induced by CBC Padding Applications to SSL, IPSEC, WTLS...'",
+        "https://en.wikipedia.org/wiki/Malleability_(cryptography)"
+      ]
+    },
+    {
+      "id": "F3",
+      "bug_class": "unvalidated_pkcs7_unpad",
+      "severity": "MEDIUM",
+      "location": {
+        "file": "code/cipher.py",
+        "lines": [19, 20]
+      },
+      "summary": "`decrypt` reads `pad_len = padded[-1]` and returns `padded[:-pad_len]` without validating that `pad_len` is in the legal PKCS#7 range [1, 16] or that the trailing `pad_len` bytes all equal `pad_len`. Two specific defects: (a) when `pad_len == 0` Python's slice semantics make `padded[:-0]` return `b''` — silently emptying the plaintext; (b) when `pad_len > len(padded)` the slice returns `b''` similarly. Combined with F2's malleability, an attacker can deterministically force `decrypt` to return empty bytes (or arbitrary truncations of length `len(P) - pad_len` for attacker-chosen pad_len), leading to silent data corruption and downstream logic confusion. This is a distinct code defect from F2 — F2 is missing authentication; F3 is unsafe Python slice semantics on attacker-influenced indices.",
+      "tier": "1",
+      "reachability": "Public API: same as F2 — any caller that passes attacker-modified bytes to `decrypt` is vulnerable. Triggering F3 requires the same tamper-capability as F2 but exploits a different post-decryption code path.",
+      "approach": "adversarial_reading + exploit_reproduction",
+      "repro": "artifacts/repro/empty_unpad.py",
+      "evidence": "The repro encrypts a 16-byte message (32-byte ciphertext including a full-block PKCS pad). Flipping a single byte in the first ciphertext block (XOR 0x10 into byte 15) makes the decrypted padding block end in 0x00, so `pad_len == 0`. `decrypt` returns `b''` (length 0) instead of raising a padding-validation error.",
+      "references": [
+        "RFC 5652 §6.3 — PKCS#7 padding (pad value must be in 1..k)"
+      ]
+    },
+    {
+      "id": "F4",
+      "bug_class": "panic_dos_empty_ciphertext",
+      "severity": "LOW",
+      "location": {
+        "file": "code/cipher.py",
+        "lines": [18, 19]
+      },
+      "summary": "`decrypt(key, b'')` raises an uncaught `IndexError` from cipher.py:19 (`pad_len = padded[-1]`). An empty ciphertext passes cleanly through `decryptor.update(b'') + decryptor.finalize()` (returning b''), then indexing `padded[-1]` panics. This is a panic-DoS bug-class distinct from F3: F3 is the *logic* defect of `padded[:-pad_len]` returning empty when pad_len==0; F4 is an unguarded slice-index that panics before any pad-validation logic runs. A caller that only catches the `cryptography` library's own exceptions (e.g. `InvalidKey`, `InvalidTag`) will not catch this Python-level `IndexError` and will crash. The supplementary section of the repro also demonstrates an attacker-chosen-length truncation (pad_len=20 → 12-byte plaintext) — strengthening the truncation claim made in F3's summary, which the F3 repro only showed for the empty case.",
+      "tier": "1",
+      "reachability": "Public API: any caller that forwards attacker-controlled bytes to `decrypt`. Attacker supplies `b''` (or any 0-length payload) and the wrapper unconditionally panics on the first post-decrypt line.",
+      "approach": "panic_path_audit + exploit_reproduction",
+      "repro": "artifacts/repro/empty_ciphertext_indexerror.py",
+      "evidence": "Running the repro prints `PANIC CONFIRMED: IndexError: index out of range` for `decrypt(KEY, b'')`. Supplementary section also prints a 12-byte attacker-truncated plaintext for pad_len=20 tampering, demonstrating the same code path can be steered to silent partial truncation as well as outright panic.",
+      "references": []
+    }
+  ]
+}

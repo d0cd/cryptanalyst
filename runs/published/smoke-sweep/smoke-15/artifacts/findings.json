@@ -1,0 +1,21 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "bug_class": "sse_cross_keyword_cooccurrence_leakage",
+      "severity": "HIGH",
+      "location": {
+        "file": "code/sse.py",
+        "lines": [57, 71]
+      },
+      "summary": "The encrypted index reuses the same deterministic encrypted document ID in every keyword posting list and as the document table key. A passive server can therefore join posting lists on equal encrypted document IDs, learning the keyword-token co-occurrence graph before queries and, after observing one query, identifying other unqueried keyword tokens attached to the returned documents. This exceeds the stated leakage goal of only search pattern and access pattern for searched keywords.",
+      "approach": "pattern_matching + property_test + exploit_reproduction",
+      "repro": "artifacts/repro/f1_sse_cross_keyword_leakage.py",
+      "evidence": "Running the repro builds a four-document corpus where each document has two keywords. From server-visible encrypted index data, every document's encrypted ID appears in multiple posting lists. After observing only the search token and results for 'crypto', the server links the unsearched tokens for 'aes', 'rsa', and 'hash'.",
+      "references": [
+        "https://journals.sagepub.com/doi/10.3233/JCS-2011-0426",
+        "https://www.usenix.org/conference/usenixsecurity21/presentation/oya"
+      ]
+    }
+  ]
+}

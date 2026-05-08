@@ -64,12 +64,16 @@ def _log_progress(msg_dict: dict, start: float) -> None:
 class ClaudeAdapter:
     name = "claude"
 
+    def setup(self, home: Path) -> None:
+        """No persistent config to write — auth is via env var."""
+
     async def run(
         self,
         workdir: Path,
         prompt: str,
         trace_path: Path,
-        max_turns: int = 100,
+        model: str = "",
+        effort: str = "",
     ) -> RunResult:
         agents_md = (workdir / "AGENTS.md").read_text()
 
@@ -80,7 +84,9 @@ class ClaudeAdapter:
             }
         }
 
-        options = ClaudeAgentOptions(
+        # Build options dict so we only pass model when set
+        # (older SDK versions reject unknown kwargs; absent = SDK default).
+        opt_kwargs: dict = dict(
             cwd=str(workdir),
             system_prompt={
                 "type": "preset",
@@ -97,8 +103,13 @@ class ClaudeAdapter:
                 "mcp__lean__restart",
             ],
             permission_mode="bypassPermissions",
-            max_turns=max_turns,
         )
+        if model:
+            opt_kwargs["model"] = model
+        if effort:
+            # ClaudeAgentOptions.effort: "low" | "medium" | "high" | "xhigh" | "max"
+            opt_kwargs["effort"] = effort
+        options = ClaudeAgentOptions(**opt_kwargs)
 
         start = time.time()
         with open(trace_path, "w") as trace:

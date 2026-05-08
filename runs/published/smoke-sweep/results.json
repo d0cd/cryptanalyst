@@ -1,0 +1,161 @@
+{
+  "tier": "smoke",
+  "targets": 17,
+  "recall": "17/17",
+  "total_findings": 24,
+  "results": [
+    {
+      "target": "smoke-01",
+      "bug_class": "clean-aead",
+      "agent": "codex",
+      "findings": 1,
+      "ground_truth_findings": 1,
+      "matched": true,
+      "source_run": "20260505-110846-clean-aead-codex"
+    },
+    {
+      "target": "smoke-02",
+      "bug_class": "weak-compare",
+      "agent": "codex",
+      "findings": 1,
+      "ground_truth_findings": 1,
+      "matched": true,
+      "source_run": "20260505-113435-weak-compare-codex"
+    },
+    {
+      "target": "smoke-03",
+      "bug_class": "hardcoded-iv",
+      "agent": "codex",
+      "findings": 2,
+      "ground_truth_findings": 2,
+      "matched": true,
+      "source_run": "20260505-111634-hardcoded-iv-codex"
+    },
+    {
+      "target": "smoke-04",
+      "bug_class": "cert-check",
+      "agent": "codex",
+      "findings": 2,
+      "ground_truth_findings": 2,
+      "matched": true,
+      "source_run": "20260505-110616-cert-check-codex"
+    },
+    {
+      "target": "smoke-05",
+      "bug_class": "dh-param-check",
+      "agent": "codex",
+      "findings": 1,
+      "ground_truth_findings": 1,
+      "matched": true,
+      "source_run": "20260505-111104-dh-param-check-codex"
+    },
+    {
+      "target": "smoke-06",
+      "bug_class": "ecies-default",
+      "agent": "codex",
+      "findings": 2,
+      "ground_truth_findings": 2,
+      "matched": true,
+      "source_run": "20260505-111247-ecies-default-codex"
+    },
+    {
+      "target": "smoke-07",
+      "bug_class": "jose-bypass",
+      "agent": "codex",
+      "findings": 1,
+      "ground_truth_findings": 1,
+      "matched": true,
+      "source_run": "20260505-111816-jose-bypass-codex"
+    },
+    {
+      "target": "smoke-08",
+      "bug_class": "kdf-context",
+      "agent": "codex",
+      "findings": 1,
+      "ground_truth_findings": 1,
+      "matched": true,
+      "source_run": "20260505-111931-kdf-context-codex"
+    },
+    {
+      "target": "smoke-09",
+      "bug_class": "key-exchange",
+      "agent": "codex",
+      "findings": 1,
+      "ground_truth_findings": 1,
+      "matched": true,
+      "source_run": "20260505-112225-key-exchange-codex"
+    },
+    {
+      "target": "smoke-10",
+      "bug_class": "kdf-wrap",
+      "agent": "codex",
+      "findings": 1,
+      "ground_truth_findings": 1,
+      "matched": true,
+      "source_run": "20260505-112031-kdf-wrap-codex"
+    },
+    {
+      "target": "smoke-11",
+      "bug_class": "bad-randomness",
+      "agent": "codex",
+      "findings": 1,
+      "ground_truth_findings": 1,
+      "matched": true,
+      "source_run": "20260505-110505-bad-randomness-codex"
+    },
+    {
+      "target": "smoke-12",
+      "bug_class": "length-extension",
+      "agent": "codex",
+      "findings": 1,
+      "ground_truth_findings": 1,
+      "matched": true,
+      "source_run": "20260505-112349-length-extension-codex"
+    },
+    {
+      "target": "smoke-13",
+      "bug_class": "state-machine",
+      "agent": "codex",
+      "findings": 2,
+      "ground_truth_findings": 2,
+      "matched": true,
+      "source_run": "20260505-112851-state-machine-codex"
+    },
+    {
+      "target": "smoke-14",
+      "bug_class": "textbook-rsa",
+      "agent": "codex",
+      "findings": 2,
+      "ground_truth_findings": 2,
+      "matched": true,
+      "source_run": "20260505-113045-textbook-rsa-codex"
+    },
+    {
+      "target": "smoke-15",
+      "bug_class": "encrypted-search",
+      "agent": "codex",
+      "findings": 1,
+      "ground_truth_findings": 1,
+      "matched": true,
+      "source_run": "20260505-111423-encrypted-search-codex"
+    },
+    {
+      "target": "smoke-16",
+      "bug_class": "psychic-sig",
+      "agent": "codex",
+      "findings": 2,
+      "ground_truth_findings": 2,
+      "matched": true,
+      "source_run": "20260505-112606-psychic-sig-codex"
+    },
+    {
+      "target": "smoke-17",
+      "bug_class": "token-service",
+      "agent": "codex",
+      "findings": 2,
+      "ground_truth_findings": 2,
+      "matched": true,
+      "source_run": "20260505-113301-token-service-codex"
+    }
+  ]
+}

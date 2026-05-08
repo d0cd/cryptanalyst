@@ -1,0 +1,38 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "bug_class": "wrong_curve_field_parameter",
+      "severity": "CRITICAL",
+      "location": {
+        "file": "code/ecdsa_sign.py",
+        "lines": [7, 7]
+      },
+      "summary": "The secp256k1 field modulus is mistyped as a 63-hex-digit composite number instead of the standardized 256-bit prime 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F. The configured generator is not on the curve modulo this value, so the group law is not secp256k1 and scalar multiplication can raise during normal key generation/signing. This breaks the core cryptographic construction rather than just rejecting an edge-case input.",
+      "approach": "pattern_matching, sage_modeling, exploit_reproduction",
+      "repro": "artifacts/repro/wrong_field_parameters.py",
+      "verification_artifact": "artifacts/sage/secp256k1_parameter_check.sage",
+      "evidence": "Running `python3 artifacts/repro/wrong_field_parameters.py` prints that code P is composite, the expected secp256k1 P is prime, G is not on the curve modulo code P but is on the expected curve, and `_point_mul(3, G)` raises `ValueError: base is not invertible for the given modulus`. Running the Sage artifact independently reports the same prime and curve-membership failures.",
+      "references": [
+        "https://www.secg.org/sec2-v2.pdf",
+        "https://std.neuromancer.sk/secg/secp256k1/"
+      ]
+    },
+    {
+      "id": "F2",
+      "bug_class": "missing_public_key_validation",
+      "severity": "HIGH",
+      "location": {
+        "file": "code/verify.py",
+        "lines": [15, 17]
+      },
+      "summary": "The verifier accepts `None`, the implementation's internal point-at-infinity sentinel, as a public key and does not reject it before scalar multiplication. For that public key an attacker can choose k, set r = x(kG), and set s = H(msg)/k mod N; verification then computes R = kG and accepts without any private key. Any caller that can pass or deserialize the infinity point as a public key gets universal signature forgery for arbitrary messages.",
+      "approach": "pattern_matching, property_test, exploit_reproduction",
+      "repro": "artifacts/repro/infinity_pubkey_forgery.py",
+      "evidence": "Running `python3 artifacts/repro/infinity_pubkey_forgery.py` constructs a signature for `b'transfer $1000000 to attacker'` with public key `None` and prints `verify(None, message, forged_signature): True`.",
+      "references": [
+        "https://www.secg.org/sec1-v2.pdf"
+      ]
+    }
+  ]
+}

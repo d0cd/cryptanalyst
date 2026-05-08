@@ -1,0 +1,36 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "bug_class": "merkle_leaf_node_confusion",
+      "severity": "HIGH",
+      "location": {
+        "file": "code/merkle.py",
+        "lines": [32, 40]
+      },
+      "summary": "The Merkle construction hashes leaf data as SHA256(item) and internal nodes as SHA256(left_hash || right_hash) without any domain-separation prefix. A 64-byte value equal to the concatenation of two child hashes is therefore accepted as a leaf whose hash is the same as that internal node. An attacker can present a shortened proof for bytes that were never in the item list, breaking inclusion-proof soundness for arbitrary byte leaves.",
+      "approach": "pattern_matching + web_research + exploit_reproduction",
+      "repro": "artifacts/repro/F1_leaf_node_confusion.py",
+      "evidence": "Running the repro prints verify_proof_accepts_forgery=True and forged_leaf_is_actual_input=False, demonstrating that verify_proof accepts a proof for H(alpha)||H(beta) even though that 64-byte value was not one of the committed leaves [alpha, beta, gamma].",
+      "references": [
+        "https://www.ietf.org/rfc/rfc9162.html#section-2.1.1"
+      ]
+    },
+    {
+      "id": "F2",
+      "bug_class": "merkle_duplicate_last_root_collision",
+      "severity": "MEDIUM",
+      "location": {
+        "file": "code/merkle.py",
+        "lines": [36, 37]
+      },
+      "summary": "Odd tree levels are handled by appending a duplicate of the last node in place. This makes the root ambiguous for some different input lists: a three-leaf list and the same list with its final leaf appended again have identical roots. Any protocol that relies on this root to commit to the exact list length or multiplicity can be tricked into accepting one list as the other unless it separately authenticates the tree size and rejects duplicate-tail ambiguity.",
+      "approach": "pattern_matching + web_research + exploit_reproduction",
+      "repro": "artifacts/repro/F2_duplicate_last_root_collision.py",
+      "evidence": "Running the repro prints roots_equal=True and lists_equal=False for [alpha, beta, gamma] versus [alpha, beta, gamma, gamma], proving that distinct leaf lists collide at the Merkle-root layer.",
+      "references": [
+        "https://bitcoin.stackexchange.com/questions/78486/question-about-identical-txids-merkle-tree-in-developer-guide"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "bug_class": "aes_gcm_nonce_reuse",
+      "severity": "CRITICAL",
+      "location": {
+        "file": "code/stream.py",
+        "lines": [21, 31]
+      },
+      "summary": "Per-chunk AES-GCM nonces are derived by ORing the chunk index into the low 32 bits of a random base nonce. OR is not injective: when a bit is already set in the base counter, chunk indices that differ only in that bit produce the same nonce. A two-chunk stream has a 50% chance of reusing the same nonce for chunks 0 and 1, exposing the XOR of plaintext chunks and enabling known-plaintext recovery for the colliding chunk data.",
+      "approach": "pattern_matching, property_test, exploit_reproduction",
+      "repro": "artifacts/repro/nonce_or_collision.py",
+      "evidence": "Running the repro fixes the base nonce low word to 1, shows chunk 0 and chunk 1 derive the identical AES-GCM nonce, and recovers the complete second plaintext chunk from the two ciphertext bodies plus the known first plaintext chunk.",
+      "references": [
+        "https://csrc.nist.gov/pubs/sp/800/38/d/final",
+        "https://nvlpubs.nist.gov/nistpubs/legacy/sp/nistspecialpublication800-38d.pdf"
+      ]
+    },
+    {
+      "id": "F2",
+      "bug_class": "unauthenticated_framing_truncation",
+      "severity": "HIGH",
+      "location": {
+        "file": "code/stream.py",
+        "lines": [55, 80]
+      },
+      "summary": "The stream-level framing is not authenticated and `decrypt_stream` does not require all bytes in the blob to be consumed. An attacker can lower the cleartext `num_chunks` field in the header, causing decryption to authenticate and return only the first chunk while silently ignoring the remaining ciphertext. This breaks whole-message integrity: a modified encrypted stream can decrypt successfully to attacker-truncated plaintext.",
+      "approach": "property_test, exploit_reproduction",
+      "repro": "artifacts/repro/unauthenticated_chunk_count_truncation.py",
+      "evidence": "Running the repro encrypts a two-chunk message, changes only bytes 12..15 of the header from chunk count 2 to 1, and `decrypt_stream` returns the first 1 MiB as valid plaintext without the second chunk marker.",
+      "references": [
+        "https://csrc.nist.gov/pubs/sp/800/38/d/final"
+      ]
+    }
+  ]
+}

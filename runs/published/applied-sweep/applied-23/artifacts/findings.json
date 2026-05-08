@@ -1,0 +1,45 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "bug_class": "rsa_no_padding_malleability",
+      "severity": "HIGH",
+      "location": {
+        "file": "code/rsa.py",
+        "lines": [
+          113,
+          117
+        ]
+      },
+      "summary": "encrypt() applies the RSA public operation directly to the integer message with no OAEP or other randomized encoding. This makes encryption deterministic and multiplicatively malleable: anyone who sees Enc(m) can compute a valid ciphertext for k*m mod n by multiplying by Enc(k), and equal plaintexts always produce equal ciphertexts.",
+      "approach": "pattern_matching + property_test + exploit_reproduction",
+      "repro": "artifacts/repro/F1_textbook_rsa_malleability.py",
+      "evidence": "Running the repro printed that encrypting the same plaintext reused the same ciphertext and that a forged ciphertext decrypted to 246913578, exactly 2 * 123456789, without using the private key for the forgery.",
+      "references": [
+        "https://www.rfc-editor.org/rfc/rfc8017",
+        "https://en.wikipedia.org/wiki/RSA_cryptosystem"
+      ]
+    },
+    {
+      "id": "F2",
+      "bug_class": "rsa_small_private_exponent",
+      "severity": "HIGH",
+      "location": {
+        "file": "code/rsa.py",
+        "lines": [
+          78,
+          110
+        ]
+      },
+      "summary": "keygen_fast() intentionally samples a private exponent with about 0.28 * log2(N) bits and then publishes the corresponding large public exponent. That places generated keys below the Boneh-Durfee small-private-exponent attack bound d < N^0.292, so the optimization produces RSA keys in a known cryptanalytic danger range despite comments claiming this is safe in practice.",
+      "approach": "pattern_matching + sage_modeling + exploit_reproduction",
+      "repro": "artifacts/repro/F2_keygen_fast_small_d.py",
+      "verification_artifact": "artifacts/sage/F2_small_d_bound.sage",
+      "evidence": "Running the repro against a toy keygen_fast(64) key produced a 63-bit modulus with a 17-bit private exponent, reported d > n^0.25 as True and d < n^0.292 as True, recovered the exact private d from public-key behavior after searching 65536 candidates, and decrypted a ciphertext to 12345. The Sage helper confirms the selected bit length remains below the Boneh-Durfee threshold by construction at larger nominal sizes.",
+      "references": [
+        "https://iacr.org/cryptodb/data/paper.php?pubkey=1956",
+        "https://eprint.iacr.org/2011/591"
+      ]
+    }
+  ]
+}

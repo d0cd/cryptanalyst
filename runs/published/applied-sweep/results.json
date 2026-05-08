@@ -1,0 +1,291 @@
+{
+  "tier": "applied",
+  "swept": 21,
+  "unswept": 12,
+  "total_findings": 36,
+  "recall": "21/21",
+  "results": [
+    {
+      "target": "applied-01",
+      "bug_class": "gcm-counter-wrap",
+      "agent": "codex",
+      "status": "swept",
+      "findings": 2,
+      "ground_truth_findings": 2,
+      "matched": true,
+      "source_run": "20260505-115549-gcm-counter-wrap-codex"
+    },
+    {
+      "target": "applied-02",
+      "bug_class": "ed25519-batch",
+      "agent": "codex",
+      "status": "swept",
+      "findings": 2,
+      "ground_truth_findings": 2,
+      "matched": true,
+      "source_run": "20260505-115139-ed25519-batch-codex"
+    },
+    {
+      "target": "applied-03",
+      "bug_class": "hostile-witness",
+      "status": "unswept",
+      "findings": 0
+    },
+    {
+      "target": "applied-04",
+      "bug_class": "unconstrained-circuit",
+      "status": "unswept",
+      "findings": 0
+    },
+    {
+      "target": "applied-05",
+      "bug_class": "protocol-binding",
+      "status": "unswept",
+      "findings": 0
+    },
+    {
+      "target": "applied-06",
+      "bug_class": "commit-bind",
+      "agent": "codex",
+      "status": "swept",
+      "findings": 1,
+      "ground_truth_findings": 1,
+      "matched": true,
+      "source_run": "20260505-115010-commit-bind-codex"
+    },
+    {
+      "target": "applied-07",
+      "bug_class": "anomalous-curve",
+      "agent": "codex",
+      "status": "swept",
+      "findings": 1,
+      "ground_truth_findings": 1,
+      "matched": true,
+      "source_run": "20260505-113643-anomalous-curve-codex"
+    },
+    {
+      "target": "applied-08",
+      "bug_class": "padding-oracle",
+      "agent": "codex",
+      "status": "swept",
+      "findings": 1,
+      "ground_truth_findings": 1,
+      "matched": true,
+      "source_run": "20260505-121116-padding-oracle-codex"
+    },
+    {
+      "target": "applied-09",
+      "bug_class": "invalid-curve",
+      "agent": "codex",
+      "status": "swept",
+      "findings": 1,
+      "ground_truth_findings": 1,
+      "matched": true,
+      "source_run": "20260505-115749-invalid-curve-codex"
+    },
+    {
+      "target": "applied-10",
+      "bug_class": "clean-ecdh",
+      "agent": "codex",
+      "status": "swept",
+      "findings": 2,
+      "ground_truth_findings": 2,
+      "matched": true,
+      "source_run": "20260505-114811-clean-ecdh-codex"
+    },
+    {
+      "target": "applied-11",
+      "bug_class": "biased-ecdsa",
+      "agent": "codex",
+      "status": "swept",
+      "findings": 1,
+      "ground_truth_findings": 1,
+      "matched": true,
+      "source_run": "20260505-114114-biased-ecdsa-codex"
+    },
+    {
+      "target": "applied-12",
+      "bug_class": "field-wraparound",
+      "status": "unswept",
+      "findings": 0
+    },
+    {
+      "target": "applied-13",
+      "bug_class": "carry-bug",
+      "status": "unswept",
+      "findings": 0
+    },
+    {
+      "target": "applied-14",
+      "bug_class": "mlkem-decaps",
+      "agent": "codex",
+      "status": "swept",
+      "findings": 1,
+      "ground_truth_findings": 1,
+      "matched": true,
+      "source_run": "20260505-120605-mlkem-decaps-codex"
+    },
+    {
+      "target": "applied-15",
+      "bug_class": "schnorr-multisig",
+      "agent": "codex",
+      "status": "swept",
+      "findings": 2,
+      "ground_truth_findings": 2,
+      "matched": true,
+      "source_run": "20260505-122455-schnorr-multisig-codex"
+    },
+    {
+      "target": "applied-16",
+      "bug_class": "auth-reflection",
+      "status": "unswept",
+      "findings": 0
+    },
+    {
+      "target": "applied-17",
+      "bug_class": "oprf-login",
+      "agent": "codex",
+      "status": "swept",
+      "findings": 3,
+      "ground_truth_findings": 3,
+      "matched": true,
+      "source_run": "20260505-120755-oprf-login-codex"
+    },
+    {
+      "target": "applied-18",
+      "bug_class": "unreduced-compare",
+      "status": "unswept",
+      "findings": 0
+    },
+    {
+      "target": "applied-19",
+      "bug_class": "wrong-curve",
+      "agent": "codex",
+      "status": "swept",
+      "findings": 2,
+      "ground_truth_findings": 2,
+      "matched": true,
+      "source_run": "20260505-123342-wrong-curve-codex"
+    },
+    {
+      "target": "applied-20",
+      "bug_class": "poly-commit",
+      "agent": "codex",
+      "status": "swept",
+      "findings": 2,
+      "ground_truth_findings": 2,
+      "matched": true,
+      "source_run": "20260505-122048-poly-commit-codex"
+    },
+    {
+      "target": "applied-21",
+      "bug_class": "frozen-heart",
+      "status": "unswept",
+      "findings": 0
+    },
+    {
+      "target": "applied-22",
+      "bug_class": "fault-rsa-crt",
+      "agent": "codex",
+      "status": "swept",
+      "findings": 1,
+      "ground_truth_findings": 1,
+      "matched": true,
+      "source_run": "20260505-115416-fault-rsa-crt-codex"
+    },
+    {
+      "target": "applied-23",
+      "bug_class": "boneh-durfee",
+      "agent": "codex",
+      "status": "swept",
+      "findings": 2,
+      "ground_truth_findings": 2,
+      "matched": true,
+      "source_run": "20260505-114550-boneh-durfee-codex"
+    },
+    {
+      "target": "applied-24",
+      "bug_class": "partial-key-rsa",
+      "agent": "codex",
+      "status": "swept",
+      "findings": 3,
+      "ground_truth_findings": 3,
+      "matched": true,
+      "source_run": "20260505-121255-partial-key-rsa-codex"
+    },
+    {
+      "target": "applied-25",
+      "bug_class": "rsa-lax-verify",
+      "agent": "codex",
+      "status": "swept",
+      "findings": 1,
+      "ground_truth_findings": 1,
+      "matched": true,
+      "source_run": "20260505-122239-rsa-lax-verify-codex"
+    },
+    {
+      "target": "applied-26",
+      "bug_class": "non-canonical-scalar",
+      "status": "unswept",
+      "findings": 0
+    },
+    {
+      "target": "applied-27",
+      "bug_class": "shamir-vault",
+      "agent": "codex",
+      "status": "swept",
+      "findings": 2,
+      "ground_truth_findings": 2,
+      "matched": true,
+      "source_run": "20260505-122704-shamir-vault-codex"
+    },
+    {
+      "target": "applied-28",
+      "bug_class": "signature-malleability",
+      "agent": "codex",
+      "status": "swept",
+      "findings": 2,
+      "ground_truth_findings": 2,
+      "matched": true,
+      "source_run": "20260505-123031-signature-malleability-codex"
+    },
+    {
+      "target": "applied-29",
+      "bug_class": "reduction-gap",
+      "status": "unswept",
+      "findings": 0
+    },
+    {
+      "target": "applied-30",
+      "bug_class": "missing-range-check",
+      "status": "unswept",
+      "findings": 0
+    },
+    {
+      "target": "applied-31",
+      "bug_class": "merkle-verify",
+      "agent": "codex",
+      "status": "swept",
+      "findings": 2,
+      "ground_truth_findings": 2,
+      "matched": true,
+      "source_run": "20260505-120334-merkle-verify-codex"
+    },
+    {
+      "target": "applied-32",
+      "bug_class": "sigma-protocol",
+      "agent": "codex",
+      "status": "swept",
+      "findings": 2,
+      "ground_truth_findings": 2,
+      "matched": true,
+      "source_run": "20260505-122841-sigma-protocol-codex"
+    },
+    {
+      "target": "applied-33",
+      "bug_class": "groth16-commit",
+      "status": "unswept",
+      "findings": 0
+    }
+  ]
+}

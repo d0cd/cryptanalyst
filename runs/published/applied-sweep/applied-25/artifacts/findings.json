@@ -1,0 +1,24 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "bug_class": "rsa_invalid_public_exponent",
+      "severity": "HIGH",
+      "location": {
+        "file": "code/verify.py",
+        "lines": [
+          55,
+          71
+        ]
+      },
+      "summary": "verify() accepts RSA public keys without validating that the public exponent is a valid RSA exponent. With e=1, RSAVP1 reduces to m = s, so an attacker can forge a signature by placing the correctly encoded PKCS#1 v1.5 DigestInfo block directly in the signature bytes. This bypasses authenticity for any workflow that accepts attacker-supplied or insufficiently validated RSA public keys.",
+      "approach": "pattern_matching + exploit_reproduction",
+      "repro": "artifacts/repro/forge_e1_signature.py",
+      "evidence": "Running the reproduction prints 'target accepted forged signature: True' and 'BUG: verify() accepts a signature forged without any private key'.",
+      "references": [
+        "https://www.rfc-editor.org/rfc/rfc8017#section-3.1",
+        "https://www.rfc-editor.org/rfc/rfc8017#section-5.2.2"
+      ]
+    }
+  ]
+}

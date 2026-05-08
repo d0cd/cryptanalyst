@@ -1,0 +1,38 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "bug_class": "ed25519_challenge_omits_public_key",
+      "severity": "HIGH",
+      "location": {
+        "file": "code/ed25519_sign.py",
+        "lines": [114, 137]
+      },
+      "summary": "The implementation computes the Ed25519 challenge as SHA512(R || msg) instead of SHA512(R || A || msg). Because the public key is not bound into the challenge, an attacker can choose arbitrary signature components R and s for a message, solve the verification equation for a matching public key A, and obtain a signature that verify_single accepts without knowing any private key. The same omitted-A challenge is used by batch verification via _hash_challenge_batch.",
+      "approach": "pattern_matching, differential_test, exploit_reproduction",
+      "repro": "artifacts/repro/F1_missing_public_key_hash_forgery.py",
+      "evidence": "Running the repro prints target_verify_single=True for a signature/public-key pair constructed without any private key, while cryptography's RFC8032 Ed25519 verifier prints rfc8032_reference_verify=False for the same tuple.",
+      "references": [
+        "https://www.rfc-editor.org/rfc/rfc8032.html#section-5.1.6",
+        "https://www.rfc-editor.org/rfc/rfc8032.html#section-5.1.7"
+      ]
+    },
+    {
+      "id": "F2",
+      "bug_class": "small_order_public_key_acceptance",
+      "severity": "HIGH",
+      "location": {
+        "file": "code/ed25519_sign.py",
+        "lines": [132, 142]
+      },
+      "summary": "verify_single accepts the Edwards identity point as a public key and does not reject small-order/non-keygen public keys. For the identity public key, the verification equation collapses to s*B == R, so anyone can forge signatures for arbitrary messages by setting R=s*B and S=s. This public key cannot be produced by keygen's clamped scalar multiplication, but the verifier accepts it from untrusted input.",
+      "approach": "property_test, exploit_reproduction",
+      "repro": "artifacts/repro/F2_small_order_public_key_forgery.py",
+      "evidence": "Running the repro for three different messages prints target_verify_single=True for signatures generated with no private seed under the encoded identity public key 0100...00.",
+      "references": [
+        "https://www.rfc-editor.org/rfc/rfc8032.html#section-5.1.5",
+        "https://www.rfc-editor.org/rfc/rfc8032.html#section-5.1.7"
+      ]
+    }
+  ]
+}

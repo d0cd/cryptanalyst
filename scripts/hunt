@@ -1,19 +1,60 @@
 #!/usr/bin/env bash
-# Usage: scripts/hunt <target-path> [agent] [mode]
-#   agent defaults to "claude"; use "codex" for the other backend.
-#   mode defaults to "hunt"; resolves to prompts/<mode>.md.
+# Usage: scripts/hunt <target> [flags]
+#
+# Required:
+#   <target>                 path to a target directory (must contain code/)
+#
+# Flags:
+#   --agent claude|codex     default: claude
+#   --mode NAME              default: hunt; resolves to prompts/<NAME>.md
+#   --model VENDOR_STRING    e.g. claude-sonnet-4-6, gpt-5; adapter default if unset
+#   --effort LEVEL           low | medium | high | xhigh | max; reasoning-effort
+#                            knob (codex: model_reasoning_effort; claude:
+#                            ClaudeAgentOptions.effort). Adapter default if unset.
+#   --cycles N               default: 10  (investigation cycles)
+#   --cycle-budget SEC       default: 600 (per-cycle wall-clock cap)
+#   --snapshot               run against an isolated git-worktree snapshot of
+#                            <target>/state (default off). Lets formalize and
+#                            hunt run concurrently without conflicting on
+#                            /repo/state.
+#   --timeout SEC            default: 7200 (host-side container hard-kill backstop)
+#
+# Auth: ANTHROPIC_API_KEY (claude) or ~/.codex/auth.json / OPENAI_API_KEY (codex).
+# These stay as env vars because they are credentials, not knobs.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
 if [[ $# -lt 1 ]]; then
-    echo "Usage: $0 <target-path> [agent] [mode]" >&2
+    sed -n '1,/^set -euo/p' "$0" | sed -n '/^# /p'
     exit 1
 fi
 
-TARGET="$1"
-AGENT="${2:-claude}"
-MODE="${3:-hunt}"
+TARGET="$1"; shift
+
+# Defaults
+AGENT="claude"
+MODE="hunt"
+MODEL=""
+EFFORT=""
+CYCLES=""
+CYCLE_BUDGET=""
+SNAPSHOT=0
+TIMEOUT=7200
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --agent)          AGENT="$2"; shift 2 ;;
+        --mode)           MODE="$2"; shift 2 ;;
+        --model)          MODEL="$2"; shift 2 ;;
+        --effort)         EFFORT="$2"; shift 2 ;;
+        --cycles)         CYCLES="$2"; shift 2 ;;
+        --cycle-budget)   CYCLE_BUDGET="$2"; shift 2 ;;
+        --snapshot)       SNAPSHOT=1; shift ;;
+        --timeout)        TIMEOUT="$2"; shift 2 ;;
+        *) echo "Unknown flag: $1" >&2; exit 1 ;;
+    esac
+done
 
 if [[ ! -d "$TARGET" ]]; then
     echo "Target directory not found: $TARGET" >&2
@@ -22,28 +63,55 @@ fi
 
 # Auth strategy differs by agent:
 #
-#   Claude — On macOS the Max-plan OAuth token lives in the system
-#     Keychain and isn't portable to a Linux container; the `claude`
-#     CLI's `--bare` mode docs confirm "OAuth and keychain are never
-#     read" non-interactively. So we require ANTHROPIC_API_KEY (Max
-#     plan members can generate a key at console.anthropic.com that
-#     bills against the Max quota). A future Linux-host code path
-#     could mount ~/.claude.json directly, but that's not the case
-#     today.
+#   Claude — Two headless paths, both env-var based. Short-lived OAuth
+#     tokens in ~/.claude/.credentials.json can't be refreshed
+#     non-interactively, so file mounting (the Codex pattern) doesn't
+#     work here.
+#       1. CLAUDE_CODE_OAUTH_TOKEN — long-lived (1y) token minted via
+#          `claude setup-token` on the host. Bills against Max-plan
+#          quota. Preferred when present.
+#       2. ANTHROPIC_API_KEY — console-issued API key. Bills at
+#          per-token API pricing, separate from any Max-plan
+#          subscription. Note: if both are set, Claude Code uses
+#          the API key, so we only forward one to the container.
+#     hunt-local bypasses Docker and uses whatever the host claude
+#     install is logged in as.
 #
 #   Codex — ~/.codex/auth.json holds the ChatGPT-account OAuth token
-#     as a real file, so we mount it RO at /auth_src and let audit.py
-#     copy it into a writable tmpfs HOME at run start. This keeps the
-#     host file immutable. Note that ChatGPT-account auth can't use
-#     the default `gpt-5-codex` model; CODEX_MODEL env overrides.
+#     as a real file that the codex CLI auto-refreshes, so we mount
+#     it RO at /auth_src and let audit.py copy it into a writable
+#     tmpfs HOME at run start. Host file stays immutable. Falls back
+#     to OPENAI_API_KEY if no auth file present.
 AUTH_ARGS=()
 case "$AGENT" in
     claude)
-        if [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
+        if [[ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]]; then
+            AUTH_ARGS+=(-e CLAUDE_CODE_OAUTH_TOKEN)
+        elif [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
             AUTH_ARGS+=(-e ANTHROPIC_API_KEY)
+        elif [[ -f "$HOME/.claude/.credentials.json" ]]; then
+            # Experimental: mount the local OAuth credentials, mirroring
+            # the Codex pattern. Access tokens in .credentials.json
+            # expire in ~10-15 min and the CLI can't refresh them
+            # non-interactively, so this works for short single-cycle
+            # runs only. Long-running cycles will 401 mid-session.
+            #
+            # Mount ONLY the auth file — never the home-root ~/.claude.json,
+            # which contains the user's full personal Claude Code state
+            # (MCP servers, skills, slash commands, history). The Codex
+            # branch mirrors this discipline: only auth.json is required,
+            # config.toml/installation_id are conditional and small.
+            AUTH_ARGS+=(-v "$HOME/.claude/.credentials.json:/auth_src/.claude/.credentials.json:ro")
         else
-            echo "No Claude auth. Generate an API key at console.anthropic.com" >&2
-            echo "(Max-plan keys bill against your Max quota), then export ANTHROPIC_API_KEY." >&2
+            echo "No Claude auth. Three options:" >&2
+            echo "  1. Mint a 1-year OAuth token bound to your Max-plan login:" >&2
+            echo "       claude setup-token" >&2
+            echo "       export CLAUDE_CODE_OAUTH_TOKEN=<the-token>" >&2
+            echo "  2. Use a console-issued API key (bills per-token, not Max quota):" >&2
+            echo "       export ANTHROPIC_API_KEY=sk-ant-..." >&2
+            echo "  3. (Experimental) materialize ~/.claude/.credentials.json on the host" >&2
+            echo "     (e.g. via 'claude-creds'); short single-cycle runs only — tokens" >&2
+            echo "     expire in ~15 min and can't refresh non-interactively." >&2
             exit 1
         fi
         ;;
@@ -91,6 +159,85 @@ mkdir -p "$RUN_DIR"
 IMAGE_DIGEST="$(docker image inspect crypto-audit:latest --format '{{.Id}}' 2>/dev/null || echo unknown)"
 GIT_SHA="$(git rev-parse --verify HEAD 2>/dev/null || echo unborn)"
 
+# Optional per-target context: if `<target>/audit.md` exists alongside
+# code/, copy it into the run dir so the agent sees it at /repo/run/audit.md
+# (its cwd). Copy rather than bind-mount because Docker Desktop on macOS
+# can't reliably bind-mount a single file into a path that's already
+# inside another bind mount. Side effect: each run captures audit.md
+# as-of-launch, which is good for reproducibility.
+if [[ -f "$TARGET_ABS/audit.md" ]]; then
+    cp "$TARGET_ABS/audit.md" "$RUN_DIR/audit.md"
+fi
+
+# Durable verification artifacts under <target>/state/ persist across runs.
+# Mounted twice: at /repo/state for agent navigation + git access, and at
+# the workspace paths Lake / Sage already expect.
+# Build artifacts (.lake/build/*/Audit) are also persisted so `lake build`
+# is incremental across runs — Mathlib oleans stay image-baked at the
+# parent level, only the per-target Audit subtree is host-mounted.
+PERSISTENCE_MOUNTS=()
+STATE_SOURCE="$TARGET_ABS/state"
+SNAPSHOT_WORKTREE=""
+if [[ -d "$TARGET_ABS/state" ]]; then
+    if [[ "$SNAPSHOT" -eq 1 ]]; then
+        # Snapshot mode: create an isolated git-worktree pinned at HEAD so
+        # this run sees a frozen view of state. Concurrent runs against
+        # the same target won't conflict — each gets its own worktree.
+        # The worktree's .lake-cache starts empty (gitignored), so the
+        # first lake build inside it will rebuild Audit.* from scratch.
+        SNAPSHOT_REF="$(git -C "$TARGET_ABS/state" rev-parse HEAD)"
+        SNAPSHOT_WORKTREE="$TARGET_ABS/.snapshots/$RUN_ID"
+        mkdir -p "$(dirname "$SNAPSHOT_WORKTREE")"
+        git -C "$TARGET_ABS/state" worktree add --detach \
+            "$SNAPSHOT_WORKTREE" "$SNAPSHOT_REF" >&2
+        STATE_SOURCE="$SNAPSHOT_WORKTREE"
+        echo "  Snapshot: $SNAPSHOT_REF -> $SNAPSHOT_WORKTREE" >&2
+    fi
+    mkdir -p "$STATE_SOURCE/.lake-cache/lib/Audit" \
+             "$STATE_SOURCE/.lake-cache/ir/Audit"
+    PERSISTENCE_MOUNTS+=(-v "$STATE_SOURCE:/repo/state:rw")
+    [[ -d "$STATE_SOURCE/lean" ]] && \
+        PERSISTENCE_MOUNTS+=(-v "$STATE_SOURCE/lean:/opt/lean-workspace/Audit:rw")
+    PERSISTENCE_MOUNTS+=(-v "$STATE_SOURCE/.lake-cache/lib/Audit:/opt/lean-workspace/.lake/build/lib/Audit:rw")
+    PERSISTENCE_MOUNTS+=(-v "$STATE_SOURCE/.lake-cache/ir/Audit:/opt/lean-workspace/.lake/build/ir/Audit:rw")
+fi
+
+# Cleanup the snapshot worktree on exit. If the run committed anything
+# to the worktree (e.g. hunt encoded a finding artifact), preserve the
+# worktree so the operator can inspect/merge: the path and the head
+# commit print at exit. Otherwise the worktree is removed silently.
+cleanup_snapshot() {
+    if [[ -n "$SNAPSHOT_WORKTREE" && -d "$SNAPSHOT_WORKTREE" ]]; then
+        local current_head
+        current_head="$(git -C "$SNAPSHOT_WORKTREE" rev-parse HEAD 2>/dev/null || echo "")"
+        if [[ -n "$current_head" && "$current_head" != "$SNAPSHOT_REF" ]]; then
+            echo "Snapshot worktree retained: $SNAPSHOT_WORKTREE" >&2
+            echo "  Initial: $SNAPSHOT_REF" >&2
+            echo "  Now:     $current_head" >&2
+            echo "  Merge:   git -C $TARGET_ABS/state merge $current_head" >&2
+            echo "  Discard: git -C $TARGET_ABS/state worktree remove --force $SNAPSHOT_WORKTREE" >&2
+        else
+            git -C "$TARGET_ABS/state" worktree remove --force "$SNAPSHOT_WORKTREE" 2>/dev/null || true
+        fi
+    fi
+}
+trap cleanup_snapshot EXIT
+
+# Build the audit.py argument vector. Optional flags only forwarded when
+# the operator supplied them — audit.py keeps its own defaults so missing
+# flags don't have to be threaded here.
+AUDIT_ARGS=(
+    --run-dir /repo/run
+    --agent "$AGENT"
+    --mode "$MODE"
+    --run-id "$RUN_ID" --target-name "$TARGET_NAME"
+    --image-digest "$IMAGE_DIGEST" --git-sha "$GIT_SHA"
+)
+[[ -n "$MODEL" ]]          && AUDIT_ARGS+=(--model "$MODEL")
+[[ -n "$EFFORT" ]]         && AUDIT_ARGS+=(--effort "$EFFORT")
+[[ -n "$CYCLES" ]]         && AUDIT_ARGS+=(--max-cycles "$CYCLES")
+[[ -n "$CYCLE_BUDGET" ]]   && AUDIT_ARGS+=(--cycle-budget "$CYCLE_BUDGET")
+
 # Bind mounts:
 #   /repo/run        RW — only this run's output dir (agent's cwd)
 #   /repo/run/code   RO — target source, mounted under run dir so AGENTS.md's
@@ -99,14 +246,14 @@ GIT_SHA="$(git rev-parse --verify HEAD 2>/dev/null || echo unborn)"
 #                         walkthrough next to code/ is invisible to the agent.
 #   /repo/runner     RO — orchestration code (loaded by `python3 -m runner.audit`)
 #   /repo/instructions, /repo/prompts  RO — agent guidance
-# Wall-clock cap: a stuck agent burns API quota silently. SIGTERM after
-# HUNT_TIMEOUT seconds, SIGKILL 30s later if the container ignores it.
-# Override via env: `HUNT_TIMEOUT=1800 ./scripts/hunt ...` for long audits.
-HUNT_TIMEOUT="${HUNT_TIMEOUT:-600}"
+#
+# --timeout is the last-resort container kill (SIGTERM, SIGKILL +30s).
+# Cycles + cycle-budget inside the container are the primary controls;
+# this just catches a wedged container that ignores asyncio cancellation.
 
 # Run with set +e so a timeout (rc 124) doesn't abort before scrub-secrets.
 set +e
-timeout --kill-after=30s "${HUNT_TIMEOUT}s" \
+timeout --kill-after=30s "${TIMEOUT}s" \
 docker run --rm \
     --user "$(id -u):$(id -g)" \
     -v "$RUN_DIR:/repo/run" \
@@ -114,23 +261,22 @@ docker run --rm \
     -v "$REPO/runner:/repo/runner:ro" \
     -v "$REPO/instructions:/repo/instructions:ro" \
     -v "$REPO/prompts:/repo/prompts:ro" \
+    -v "$REPO/env/lean-skills/skills:/repo/lean-skills:ro" \
+    -v "$REPO/env/lean4-skills/plugins/lean4:/repo/lean4-skills:ro" \
+    "${PERSISTENCE_MOUNTS[@]}" \
     --tmpfs /tmp:size=2G \
     --memory=16g --cpus=4 --pids-limit=512 \
     "${AUTH_ARGS[@]}" \
     --tmpfs /home/audit:size=128M,uid=$(id -u),gid=$(id -g) \
     -e HOME=/home/audit \
-    ${CODEX_MODEL:+-e CODEX_MODEL="$CODEX_MODEL"} \
     -w /repo \
     crypto-audit:latest \
-    python3 -m runner.audit --run-dir /repo/run --agent "$AGENT" \
-        --mode "$MODE" \
-        --run-id "$RUN_ID" --target-name "$TARGET_NAME" \
-        --image-digest "$IMAGE_DIGEST" --git-sha "$GIT_SHA"
+    python3 -m runner.audit "${AUDIT_ARGS[@]}"
 RC=$?
 set -e
 
 if [[ $RC -eq 124 ]]; then
-    echo "WARNING: hunt exceeded HUNT_TIMEOUT=${HUNT_TIMEOUT}s and was terminated. Partial artifacts in $RUN_DIR" >&2
+    echo "WARNING: hunt exceeded --timeout=${TIMEOUT}s and was terminated. Partial artifacts in $RUN_DIR" >&2
 elif [[ $RC -eq 137 ]]; then
     echo "WARNING: hunt was SIGKILLed after the grace period. Partial artifacts in $RUN_DIR" >&2
 fi
@@ -138,7 +284,7 @@ fi
 # RUN_ID, TARGET_NAME, IMAGE_DIGEST, GIT_SHA are passed as CLI args to
 # the runner (which records them in run.json) instead of env vars, so
 # the agent's bash sessions can't read the target's identity via `env`
-# or `printenv`. The agent only sees CODEX_MODEL (if set) and HOME.
+# or `printenv`. The agent only sees HOME inside the container.
 
 ./scripts/scrub-secrets "$RUN_DIR"
 

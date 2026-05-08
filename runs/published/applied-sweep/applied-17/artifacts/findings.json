@@ -1,0 +1,47 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "bug_class": "public_key_hmac_authentication_bypass",
+      "severity": "CRITICAL",
+      "location": {
+        "file": "code/server.py",
+        "lines": [102, 105]
+      },
+      "summary": "Login verification accepts HMAC(sha256(cred_public), challenge), so the authenticator is keyed only by a public value rather than by the decrypted credential private key or a real signature. Anyone who can learn the stored credential public key can compute a valid response for a fresh challenge without knowing the password, decrypting the envelope, or possessing the private key.",
+      "approach": "pattern_matching + exploit_reproduction",
+      "repro": "artifacts/repro/F1_auth_bypass_public_hmac.py",
+      "evidence": "Running the repro prints 'forged login accepted without password or envelope: True' after first confirming the real password succeeds and a wrong password fails.",
+      "references": []
+    },
+    {
+      "id": "F2",
+      "bug_class": "dleq_fiat_shamir_transcript_not_bound_to_statement",
+      "severity": "HIGH",
+      "location": {
+        "file": "code/oprf.py",
+        "lines": [96, 122]
+      },
+      "summary": "The DLEQ Fiat-Shamir challenge hashes only G, Y, V1, and V2, omitting the statement points M and Z. A valid proof from one OPRF transcript can therefore be algebraically retargeted to a different client point M' with a forged Z' that is not k*M', and client_finalize accepts it as a verified OPRF evaluation.",
+      "approach": "pattern_matching + property_test + exploit_reproduction",
+      "repro": "artifacts/repro/F2_dleq_transcript_malleability.py",
+      "evidence": "Running the repro prints that the retargeted proof is accepted while forged Z differs from the real k*M and the finalized OPRF output differs from the real output.",
+      "references": []
+    },
+    {
+      "id": "F3",
+      "bug_class": "invalid_curve_small_subgroup_key_leak",
+      "severity": "HIGH",
+      "location": {
+        "file": "code/oprf.py",
+        "lines": [50, 57]
+      },
+      "summary": "The OPRF scalar multiplication accepts unvalidated input points. Because the addition formulas do not check that M is on secp256k1, an attacker can send a point on a different curve with small order, observe Z = k*M, and solve a tiny discrete log to recover the server OPRF key modulo that subgroup order. Repeating this with other invalid-curve subgroups would progressively recover the static OPRF key.",
+      "approach": "sage_modeling + exploit_reproduction",
+      "repro": "artifacts/repro/F3_invalid_curve_key_leak.py",
+      "verification_artifact": "artifacts/sage/F3_invalid_curve_point.sage",
+      "evidence": "Running the repro uses a hard-coded order-13 point that is not on secp256k1 and prints the recovered server key mod 13 matching the actual server key mod 13 from one OPRF evaluation.",
+      "references": []
+    }
+  ]
+}

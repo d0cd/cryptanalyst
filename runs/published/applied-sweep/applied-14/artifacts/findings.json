@@ -1,0 +1,21 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "bug_class": "missing_fo_reencryption_check",
+      "severity": "CRITICAL",
+      "location": {
+        "file": "code/mlkem.py",
+        "lines": [213, 223]
+      },
+      "summary": "Decapsulation derives and returns a shared secret from the decrypted message without re-encrypting and comparing the ciphertext. An attacker can therefore submit a crafted ciphertext that decrypts to an attacker-chosen 32-byte message and compute the exact shared secret returned by decaps from public information, breaking the KEM's core secrecy property.",
+      "approach": "pattern_matching + exploit_reproduction + property_test",
+      "repro": "artifacts/repro/forge_chosen_shared_secret.py",
+      "evidence": "Running the repro constructs ct = Encode(0) || Encode(Decompress(m)) for chosen m, then shows mlkem.decaps(sk, ct) equals SHA256('ss:' || SHA256(m || pk.to_bytes())) computed by the attacker.",
+      "references": [
+        "https://nvlpubs.nist.gov/nistpubs/fips/nist.fips.203.pdf",
+        "https://csrc.nist.gov/pubs/fips/203/final"
+      ]
+    }
+  ]
+}

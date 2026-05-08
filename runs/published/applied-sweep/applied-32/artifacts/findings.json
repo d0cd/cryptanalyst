@@ -1,0 +1,40 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "bug_class": "schnorr_nonce_reuse",
+      "severity": "CRITICAL",
+      "location": {
+        "file": "code/schnorr_id.py",
+        "lines": [123, 145]
+      },
+      "summary": "`prove_batch` reuses one Schnorr nonce/commitment `R` for every message in the batch while deriving a different Fiat-Shamir challenge per message. For two proofs from the same batch, the shared nonce cancels in `s1 - s2 = (c1 - c2) * x mod Q`, allowing anyone who sees the proofs to recover the private key.",
+      "approach": "pattern_matching + exploit_reproduction",
+      "repro": "artifacts/repro/batch_nonce_reuse_key_recovery.py",
+      "evidence": "Running the repro shows the two batch proofs share the same commitment and prints an identical original and recovered private key, with `public key matches: True`.",
+      "references": [
+        "https://www.rfc-editor.org/rfc/rfc8235",
+        "https://b10c.me/blog/009-schnorr-nonce-reuse-challenge/",
+        "https://www.zkdocs.com/docs/zkdocs/zero-knowledge-protocols/schnorr/"
+      ]
+    },
+    {
+      "id": "F2",
+      "bug_class": "missing_public_key_validation",
+      "severity": "HIGH",
+      "location": {
+        "file": "code/schnorr_id.py",
+        "lines": [97, 120]
+      },
+      "summary": "`verify_fiat_shamir` never validates that `Y` is a non-identity member of the Schnorr subgroup. The invalid public key `Y = 1` makes the verification equation reduce to `g^s == R`, so an attacker can choose any response `s`, set `R = g^s`, compute the hash challenge, and obtain an accepted proof without a valid nonzero secret key.",
+      "approach": "pattern_matching + exploit_reproduction",
+      "repro": "artifacts/repro/identity_public_key_forgery.py",
+      "evidence": "Running the repro prints `invalid public key Y=1 accepted: True` for a forged Fiat-Shamir proof constructed without calling `keygen` or knowing any valid private key in `[1, Q-1]`.",
+      "references": [
+        "https://www.rfc-editor.org/rfc/rfc8235",
+        "https://www.zkdocs.com/docs/zkdocs/zero-knowledge-protocols/schnorr/",
+        "https://en.wikipedia.org/wiki/Schnorr_group"
+      ]
+    }
+  ]
+}

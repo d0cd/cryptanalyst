@@ -1,0 +1,21 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "bug_class": "key_confirmation_role_confusion_reflection",
+      "severity": "MEDIUM",
+      "location": {
+        "file": "code/handshake.py",
+        "lines": [48, 61]
+      },
+      "summary": "verify_peer_confirmation ignores its my_role argument and accepts either the client_finished or server_finished HMAC label. This breaks the role separation described in the protocol comment: a client's own HMAC(shared_secret, \"client_finished\") can be reflected back and accepted as the peer's server confirmation, so the client can believe the server confirmed the key when no server_finished tag was produced.",
+      "approach": "pattern_matching + property_test + exploit_reproduction",
+      "repro": "artifacts/repro/F1_reflection_accepts_own_finished.py",
+      "evidence": "Running the repro prints that the vulnerable verifier accepts a reflected client tag while a role-strict verifier rejects it, then exits successfully with 'BUG: client accepts its own confirmation tag as the server confirmation'.",
+      "references": [
+        "https://www.rfc-editor.org/rfc/rfc8446.html",
+        "https://en.wikipedia.org/wiki/Reflection_attack"
+      ]
+    }
+  ]
+}

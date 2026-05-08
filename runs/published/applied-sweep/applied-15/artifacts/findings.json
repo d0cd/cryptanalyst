@@ -1,0 +1,37 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "bug_class": "rogue_key_attack",
+      "severity": "CRITICAL",
+      "location": {
+        "file": "code/multisig.py",
+        "lines": [147, 156]
+      },
+      "summary": "aggregate_public_keys() claims to use MuSig key-coefficient delinearization, but it computes the coefficients and then ignores them, returning the naive sum of participant keys. A malicious participant can register a rogue key equal to an attacker-controlled key minus the victim's key, making the aggregate public key entirely attacker-controlled. The attacker can then produce a valid aggregate Schnorr signature alone, without any nonce or partial signature from the victim whose key appears in the participant set.",
+      "approach": "pattern_matching + web_research + exploit_reproduction",
+      "repro": "artifacts/repro/rogue_key_attack.py",
+      "evidence": "Running artifacts/repro/rogue_key_attack.py prints that the victim public key is included, the aggregate key equals the attacker's chosen key, the victim produced no nonce or partial signature, and the forged aggregate signature verifies as True.",
+      "references": [
+        "https://eprint.iacr.org/2018/068.pdf",
+        "https://blog.blockstream.com/en-musig-key-aggregation-schnorr-signatures/"
+      ]
+    },
+    {
+      "id": "F2",
+      "bug_class": "schnorr_nonce_reuse_key_recovery",
+      "severity": "HIGH",
+      "location": {
+        "file": "code/multisig.py",
+        "lines": [91, 112]
+      },
+      "summary": "Signer.commit_nonce() stores a nonce on the Signer object and Signer.partial_sign() can be called repeatedly with that same nonce for different messages. In Schnorr signatures, two responses using the same nonce satisfy s = k + e*d for different challenges e, so the private key is recovered as (s1 - s2)/(e1 - e2) mod N. A malicious coordinator can request two partial signatures before the signer refreshes its nonce and extract the signer's long-term private key.",
+      "approach": "property_test + exploit_reproduction",
+      "repro": "artifacts/repro/nonce_reuse_key_recovery.py",
+      "evidence": "Running artifacts/repro/nonce_reuse_key_recovery.py prints that the same nonce point was used for both partial signatures, the signer accepted two different messages with one nonce, and the recovered private key equals the real private key.",
+      "references": [
+        "https://en.wikipedia.org/wiki/Schnorr_signature"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "bug_class": "missing_domain_separation_key_reuse",
+      "severity": "HIGH",
+      "location": {
+        "file": "code/keys.py",
+        "lines": [17, 40]
+      },
+      "summary": "The service claims to derive separate encryption and MAC keys, but derive_encryption_key and derive_mac_key both call HKDF with the same master secret, same caller salt, empty info, and same output length. For any salt, the two public APIs therefore return the exact same 32-byte key, collapsing key separation between encryption and authentication domains and exposing both uses if either key domain is compromised or misused.",
+      "approach": "pattern_matching + property_test + exploit_reproduction",
+      "repro": "artifacts/repro/F1_key_reuse.py",
+      "evidence": "Running the repro prints BUG and shows derive_keypair returns enc_key == mac_key for empty, fixed, and random salts; it also confirms derive_encryption_key(b'same-context') == derive_mac_key(b'same-context').",
+      "references": [
+        "https://www.rfc-editor.org/rfc/rfc5869"
+      ]
+    }
+  ]
+}

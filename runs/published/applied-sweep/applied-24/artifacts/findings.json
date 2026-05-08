@@ -1,0 +1,50 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "bug_class": "rsa_partial_prime_disclosure",
+      "severity": "HIGH",
+      "location": {
+        "file": "code/server.py",
+        "lines": [57, 83]
+      },
+      "summary": "The diagnostics endpoint exposes the most significant bytes of the secret RSA prime p together with the public modulus. For balanced RSA, knowing a sufficiently large contiguous prefix of a prime factor is a partial key exposure vulnerability: an attacker can recover the remaining low bits with a Coppersmith-style small-root attack, factor n, derive d, and forge signatures.",
+      "approach": "pattern_matching + web_research + sage_modeling + exploit_reproduction",
+      "repro": "artifacts/repro/f1_factor_from_diagnostics.sh",
+      "verification_artifact": "artifacts/sage/f1_factor_from_diagnostics.sage",
+      "evidence": "Running the repro samples a valid key from keygen(1024), uses only diagnostics output to recover p, derives the private exponent, and prints factored_p_matches_original=True and forged_signature_verifies=True.",
+      "references": [
+        "https://crypto.stackexchange.com/questions/8258/rsa-leak-bits-to-factor-n",
+        "https://latticehacks.cr.yp.to/rsa.html"
+      ]
+    },
+    {
+      "id": "F2",
+      "bug_class": "rsa_signature_noncanonical_acceptance",
+      "severity": "LOW",
+      "location": {
+        "file": "code/server.py",
+        "lines": [50, 54]
+      },
+      "summary": "The verifier accepts signature integers outside the valid RSA range. Because pow(signature, e, n) reduces signature modulo n, any valid signature can be changed to signature + n, signature + 2n, and so on while still verifying for the same message. This violates strict signature canonicalization and can break protocols that log, compare, deduplicate, or bind the exact signature representation.",
+      "approach": "property_test + exploit_reproduction",
+      "repro": "artifacts/repro/f2_signature_malleability.py",
+      "evidence": "Running the repro signs one message, constructs signature+n, and shows both the canonical and non-canonical signatures verify successfully.",
+      "references": []
+    },
+    {
+      "id": "F3",
+      "bug_class": "rsa_modulus_size_shortfall",
+      "severity": "LOW",
+      "location": {
+        "file": "code/server.py",
+        "lines": [26, 41]
+      },
+      "summary": "keygen(bits) does not ensure that the final RSA modulus has the requested bit length. It generates two half-size primes with their top bit set, but the product of two such primes can still be one bit short. As a result, keygen(1024) can return a 1023-bit modulus, violating the advertised key-size contract and any compliance check expecting at least 1024 bits.",
+      "approach": "property_test + exploit_reproduction",
+      "repro": "artifacts/repro/f3_key_size_shortfall.py",
+      "evidence": "Running the repro repeatedly calls keygen(1024) until it returns a modulus with n_bits=1023, which typically occurs within a few attempts.",
+      "references": []
+    }
+  ]
+}

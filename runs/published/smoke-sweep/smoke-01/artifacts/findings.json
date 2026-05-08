@@ -1,0 +1,20 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "bug_class": "self_test_exception_swallowing",
+      "severity": "LOW",
+      "location": {
+        "file": "code/envelope.py",
+        "lines": [57, 70]
+      },
+      "summary": "The two negative self-tests in envelope.py's __main__ block use `try: ...; assert False, '...'; except Exception: pass`. AssertionError is a subclass of Exception, so when the code-under-test silently accepts a wrong context (or tampered ciphertext) instead of raising, the `assert False` AssertionError is swallowed by the bare `except Exception:` and the script continues to print 'OK'. The negative tests therefore cannot fail -- they provide no protection against a future regression that breaks context binding or AAD/tag verification in open_().",
+      "tier": "4",
+      "reachability": "Internal API only: this is test code in `if __name__ == '__main__'`. It only runs when somebody invokes `python envelope.py` directly. Not reachable from any protocol or untrusted caller; the impact is reduced detection coverage of future regressions, not an exploitable crypto flaw.",
+      "approach": "pattern_matching, exploit_reproduction",
+      "repro": "artifacts/repro/repro_self_test_swallows.py",
+      "evidence": "The repro replaces `envelope.open_` with a regression that swallows `InvalidTag` and returns b''. Real `open_` raises `InvalidTag` on wrong context and tampered ct; the broken version silently returns b''. When the broken version is plugged into the module's own self-test logic, the test still prints `OK: seal, open, context-bind, tamper-reject, nonce-unique` and exits 0 -- proving that the negative tests on lines 57-70 cannot detect the regression they were written to catch.",
+      "references": []
+    }
+  ]
+}

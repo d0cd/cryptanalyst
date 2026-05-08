@@ -1,0 +1,24 @@
+{
+  "findings": [
+    {
+      "id": "F1",
+      "bug_class": "invalid_curve_public_key_validation",
+      "severity": "HIGH",
+      "location": {
+        "file": "code/dh.py",
+        "lines": [
+          54,
+          60
+        ]
+      },
+      "summary": "derive_shared() accepts arbitrary caller-supplied coordinates and immediately multiplies them by the service's static P-256 private scalar. It never checks that the peer public key is on the P-256 curve or in the expected group. An attacker can send low-order invalid points and distinguish the resulting digest from the point-at-infinity error, leaking congruence information about the static private scalar. Repeating this with more invalid-curve subgroups is the classic invalid-curve/small-subgroup ECDH key extraction pattern.",
+      "approach": "pattern_matching + exploit_reproduction + differential_test",
+      "repro": "artifacts/repro/invalid_curve_leak.py",
+      "evidence": "Running the repro sends invalid points (1,0) and (3,4), verifies they are not on P-256, and shows derive_shared() still processes them. The service response for the order-2 probe reveals d mod 2, and the response for the order-3 probe reveals whether d mod 3 is zero; both match the target static private scalar.",
+      "references": [
+        "https://iacr.org/archive/pkc2003/25670211/25670211.pdf",
+        "https://advisories.gitlab.com/pkg/pypi/cryptography/CVE-2026-26007/"
+      ]
+    }
+  ]
+}
