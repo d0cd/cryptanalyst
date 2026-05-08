@@ -1,4 +1,4 @@
-# Cryptanalyst — Crypto Bug-Finding Harness
+# Cryptanalyst 
 
 A goal-directed cryptographic bug finder driven by Claude Code or OpenAI
 Codex. Both agents see an identical containerized workspace and toolchain
