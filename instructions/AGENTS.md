@@ -114,12 +114,53 @@ protocol's public interface.
   cached. Your `Audit/` subtree is the durable model from
   `/repo/state/lean/`.
 
+### Harness environment notes
+
+A few non-obvious facts about the container that, if rediscovered
+mid-cycle, can cost a full cycle. Read these before running anything
+that takes more than a minute.
+
+- **`$HOME` (`/home/audit`) is a tmpfs and is `noexec`.** Toolchains
+  whose build emits an executable that is then run cannot work from
+  there (cargo build scripts are the canonical case, but the same
+  applies to any local install whose post-install step executes
+  something it just wrote). For cargo, set
+  `CARGO_TARGET_DIR=/repo/state/cargo-target`; the bind-mounted
+  state directory is exec-allowed and the cache persists across
+  runs.
+- **The MCP `lean.check` REPL does not have your Lake-built `Audit.*`
+  modules loaded.** Use it for one-off snippet type-checks against
+  Mathlib only. For multi-file work that needs imports between your
+  own files, write into `/opt/lean-workspace/Audit/`
+  (= `/repo/state/lean/`) and run `lake build`. The `.lake/build`
+  cache under `/repo/state/.lake-cache/` persists across runs.
+- **Snapshot mode** (when the operator launches with `--snapshot`)
+  mounts a frozen `git worktree` of `<target>/state` at
+  `/repo/state`, not the live state. Any commits land in the
+  worktree, not the live tree; the operator merges them on exit.
+  Plan accordingly when deciding whether to commit cumulative work.
+
 ## Tools at Your Disposal
 Standard shell, plus:
 - `lean`, `lake` — Lean 4 with Mathlib pre-cached.
 - MCP `lean.check`, `lean.save_to_artifact`, `lean.restart` — interactive
   Lean REPL. Prefer this over `lake build` for fast snippet iteration.
 - `sage` — SageMath.
+- `coqc`, `coqtop`, `coq_makefile` — Coq 8.18 with FCF (Foundational
+  Cryptography Framework) and coq-lsp pre-installed via OPAM.
+- MCP `rocq.rocq_start`, `rocq.rocq_step_multi`, `rocq.rocq_check`
+  (interactive proof state via Petanque); `rocq.rocq_compile`,
+  `rocq.rocq_compile_file`, `rocq.rocq_verify` (whole-file or theorem
+  compile); `rocq.rocq_query`, `rocq.rocq_assumptions`,
+  `rocq.rocq_toc`, `rocq.rocq_notations`, `rocq.rocq_diag`
+  (introspection). Parallel to the Lean MCP; prefer it over `coqc`
+  for fast iteration. Use Coq for game-based cryptographic proofs
+  (advantage definitions, game hops, reductions) when Lean+Mathlib
+  lacks the right machinery. Coq files live under
+  `/repo/state/coq/`; `COQPATH` is set so `Require Import FCF.FCF.`
+  resolves out of the box. See `prompts/formalize.md`'s
+  `coq-fcf` activity and Tool selection section for when to reach
+  for Coq vs Lean.
 - Python with: cryptography, pycryptodome, pynacl, ecdsa, sympy, gmpy2,
   z3-solver, hypothesis, pytest.
 - `rg`, `fd`, `jq` for fast search and JSON.
@@ -136,83 +177,29 @@ In a containerized run the environment is ephemeral — install freely.
 In a local run, prefer installing into a virtualenv or project-local
 directory to avoid polluting the host.
 
-### Lean structural principle: one canonical Op family
+### Skills available
 
-When the model uses an operational `inductive Op` to represent
-protocol operations, **the Op family is one canonical type** —
-either a single `inductive Op` (for small protocols, < ~50
-constructors) or a thin canonical `Op` wrapper over per-sub-protocol
-enums (for larger ones). Don't introduce parallel `inductive
-TypedOp` / `LocalOp` / `ProtocolOp` enums in topic files; topic
-files contribute by adding constructors to the canonical family
-or to a per-sub-protocol enum that the canonical Op wraps.
+Three skill packs are loaded on demand. Read them when their topic
+comes up rather than inventing methodology from first principles:
 
-Lean's `deriving DecidableEq` is roughly O(N²) and chokes around
-100+ constructors with typed parameters, so any non-trivial
-protocol's Op should be decomposed by sub-protocol from the start:
+- **`/opt/skills/lean-modeling/SKILL.md`** — patterns for protocol-
+  level Lean: canonical `Op` family layout, five worked templates
+  (operational sequences, refinement, state invariants, game hops at
+  the structural layer, compositional decomposition), `firstDiff`
+  helper, multi-file workspace conventions, narrow vs full Mathlib
+  imports.
+- **`/opt/skills/coq/SKILL.md`** — Coq + FCF guidance: when to reach
+  for Coq+FCF (probabilistic-game claims), MCP workflow, FCF skeleton
+  template, common stuck points, citation back to Lean.
+- **`/opt/skills/cryptanalyst/SKILL.md`** — cross-cutting *why*
+  behind the prompt rules: citation grammar, annotation discipline,
+  persistence layout, cross-tool flow.
 
-```lean
-inductive LayerAOp where ... deriving DecidableEq, Repr
-inductive LayerBOp where ... deriving DecidableEq, Repr
-inductive Op where
-  | layerA (op : LayerAOp)
-  | layerB (op : LayerBOp)
-  deriving DecidableEq, Repr
-```
-
-This is *structured composition*, not fragmentation. Every
-`List Op` trace still references the canonical type, equality
-theorems still discharge via `native_decide`, and per-sub-protocol
-enums stay small enough to derive cheaply. See
-`prompts/formalize.md` for the full discipline.
-
-### Lean proof skills (mounted)
-
-Two Lean-specific skill repos are mounted in the container for
-when proof construction or Mathlib navigation comes up:
-
-- `/repo/lean-skills/` — official Lean team skills. Most relevant:
-  `lean-proof/` (methodical proof writing) and `mathlib-build/`
-  (build verbosity controls).
-- `/repo/lean4-skills/` — community workflow pack. Commands:
-  `prove`, `autoprove`, `formalize`, `checkpoint`, `refactor`,
-  `golf`, `learn`. Useful for real proof work (not `native_decide`
-  automation), Mathlib idioms, proof cleanup.
-
-Read these when their topic comes up rather than inventing
-methodology from first principles.
-
-### Working with Lean across multiple files
-The MCP `check` tool type-checks one snippet against an in-memory
-environment; `env` chaining extends that environment but doesn't write
-files. For protocol-level modeling that needs multiple Lean files with
-imports between them, write the files directly into the pre-built
-workspace and use `lake build`:
-
-```
-/opt/lean-workspace/
-  lakefile.lean              # already configured with Mathlib
-  Audit/                # bind-mounted from <target>/state/lean/ — DURABLE
-    Scratch.lean             # the MCP's default scratch file
-    <YourNamespace>/         # organize freely — Varuna/, Marlin/, RSA/, etc.
-      Group.lean
-      Properties.lean        # may `import Audit.<YourNamespace>.Group`
-```
-
-This directory is writable by you, shares the lakefile so `import Mathlib`
-(or any narrower submodule) resolves without a rebuild, and **persists
-across runs** (it's bind-mounted from `<target>/state/lean/`). Use the
-MCP for tight iteration; switch to file-based when you need imports
-across files. The same tree is also visible at `/repo/state/lean/` for
-filesystem navigation and git access.
-
-**Tip on Mathlib imports:** `import Mathlib` pulls the whole library
-(~30–60s cold load on the REPL). For most tasks a narrow import is
-enough — e.g. `import Mathlib.Tactic.Linarith`,
-`import Mathlib.NumberTheory.Padics`,
-`import Mathlib.Algebra.Group.Basic`. Use the narrowest import that
-makes your tactic/definition resolve. The MCP's first call pays the
-import cost; subsequent calls reuse the loaded environment.
+Two third-party Lean skill packs are also pinned in the image:
+`/opt/lean-skills/skills/` (official Lean team — PR conventions,
+mathlib-*, nightly-testing) and `/opt/lean4-skills/plugins/lean4/`
+(cameronfreer/lean4-skills — `prove`, `autoprove`, `formalize`,
+`checkpoint`, `refactor`, `golf`, `learn`).
 
 ### Cumulative protocol modeling
 

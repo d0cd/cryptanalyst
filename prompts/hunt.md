@@ -16,11 +16,29 @@ come from high-effort cycles (adversarial code reading, primitive-
 flow enumeration, trace-faithfulness audit). Drift toward "sanity
 check" / "follow-up" cycles is the cost-greedy bias to resist.
 
-- **Bootstrap** (queue empty/missing). Recon recent fixes,
-  threat-model, spec sources, initial spec trace, proof
-  obligations, trust boundaries, hypothesis queue. For each prior
-  finding in `audit.md`, generate at least one perturbation
-  hypothesis (other-class bugs at known-bug sites — bugs cluster).
+- **Bootstrap** (every cycle 1, even when persisted memory exists).
+  Write `artifacts/notes.md` **before any tooling** with these
+  sections (order is your call; all four are required):
+    - threat model + attacker capabilities
+    - spec sources (papers, in-tree docs)
+    - **blind spots** — components in `code/` the durable model
+      does NOT cover (primitives named only in axiom statements,
+      sub-protocols without parallel traces, modules without
+      behavioral invariants, areas `audit.md` flags as untouched).
+      Regenerate this section each launch — do not inherit it
+      stale from a prior run.
+    - hypothesis queue — both inherited (from prior notes / from
+      `audit.md` open leads) and fresh ones drawn from blind spots.
+      Rank by signal-to-cost; weight novelty for blind-spot
+      targets.
+
+  Persisted memory is the harness's strength; it lets cumulative
+  audits build over many runs. The failure mode is not that you
+  read it but that you **only** read it. Regenerating blind spots
+  each launch is the forcing function for fresh search.
+
+  If the cycle gets cancelled mid-build, persisted notes survive,
+  in-flight thinking does not. That's why notes go before tooling.
 
 - **Investigate one open hypothesis.** Re-rank by accumulated
   evidence first. If queue is monoculture in one bug class /
@@ -45,6 +63,19 @@ check" / "follow-up" cycles is the cost-greedy bias to resist.
   in a single `notes.md` table: (call site, what's consumed, what
   was checked before, what's consumed after). Every site, not a
   sample.
+
+- **Spawn from blind spots.** When the hypothesis queue and recent
+  cycles cluster around territory the durable model has already
+  covered (areas with parallel `List Op` traces, sub-protocols
+  with state-machine invariants, modules touched by multiple prior
+  cycles), allocate at least 1 in 3 cycles to a primitive-flow the
+  model treats as black-box: primitives named only inside axiom
+  statements, components without parallel traces, sub-protocols
+  without state invariants, modules the durable model never opened.
+  Bugs cluster, but cycle attention also clusters; the converged-
+  on territory has had its surface bugs shaken out, while the
+  unmodeled territory has not. Use the durable model as a coverage
+  map — the gaps in it are where unsurfaced bugs likely live.
 
 - **Recon refresh / threat-model refinement** when those are
   higher-leverage than investigation.
@@ -91,9 +122,31 @@ When a cycle confirms a finding, extend the cumulative formal
 model in the same cycle — don't defer. Add or refine the durable
 artifact (theorem, divergent sequence, type-level statement) that
 captures what the bug demonstrates, and reference it in
-`verification_artifact`. Same-cycle encoding closes the window
-where a finding exists in `findings.json` but not the durable
-model. See `prompts/formalize.md` for Lean conventions.
+`verification_artifact`.
+
+**`verification_artifact` is required, not optional.** Every entry
+in `findings.json` must have it set. The value MUST be one of:
+
+- (a) `state/lean/<path>.lean#<decl>` — declaration-level pointer
+  to a durable Lean theorem, sequence, or axiom. The file must
+  exist in `/repo/state/lean/`, not `artifacts/lean/` (the latter
+  is non-durable and vanishes when the run ends).
+- (b) `state/sage/<path>.sage` — durable Sage script.
+- (c) The literal string `"no-formalization"` — when no durable
+  artifact exists yet. Choose this rather than guessing or
+  leaving the field empty.
+
+Schema violations (omitting the field, leaving it empty,
+writing an `artifacts/` path) break machine-checkable cross-
+referencing between findings and formal claims and trigger a
+runner lint error. Write the field at the same time as the
+finding, not at end-of-cycle.
+
+If you wrote `"no-formalization"` for a finding, queue a
+hypothesis to produce the durable artifact in a later cycle.
+Same-cycle encoding closes the window where a finding exists
+in `findings.json` but not the durable model. See
+`prompts/formalize.md` for Lean conventions.
 
 ## Discipline
 
@@ -104,5 +157,28 @@ model. See `prompts/formalize.md` for Lean conventions.
   add it to the queue as `open` and stay focused.
 - Append-only on persistent artifacts: never delete prior Lean
   files, repros, notes, or hypotheses.
+- **Infrastructure budget.** If you spend more than ~10 minutes (or
+  ~30 tool calls) on environment, build, or dependency work
+  without a substantive observation, stop. Append a `blocker`
+  entry to `notes.md` describing what you tried and what failed,
+  then pivot to a different avenue or activity. Sunk-cost gradient
+  on tooling work is the most common way a cycle is wasted; name
+  it explicitly so you can pivot without rationalizing.
+- **Read the trust base critically.** A `state/lean/` axiom marked
+  `VACUOUS-PLACEHOLDER`, or lacking any grounding (no
+  `SageReference:`, `CoqReference:`, `SpecSource:`, or Mathlib
+  derivation), is not load-bearing evidence — it is the property
+  the formal work has not yet justified. A hypothesis "refuted by
+  reduction to axiom X" is only a real refutation when X is itself
+  grounded.
+- **End-of-cycle update to `notes.md`.** At cycle end, update
+  `notes.md` with what this cycle did, what it changed on disk, and
+  what the next cycle should pick up. Every cycle update **must
+  include a `## Caveats` heading** listing things this cycle did
+  NOT do — refuted-by-ungrounded-axiom shortcuts, trust-base
+  axioms cited without checking whether the underlying invariant
+  fired, blind-spots not yet attacked. Empty body is valid; missing
+  heading is a discipline violation. Caveats are the load-bearing
+  audit trail of admitted limits; everything else is your call.
 
 Stopping is the runner's job.

@@ -74,8 +74,73 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
 ENV PATH="/opt/cargo/bin:${PATH}"
 
 # --- Lean MCP server ---
-COPY mcp_servers/lean /opt/lean-mcp
+COPY env/mcp/lean /opt/lean-mcp
 RUN cd /opt/lean-mcp && pip install --break-system-packages -e .
+
+# --- Skills (proof / methodology guidance the agent loads on demand) ---
+# Two upstream skill packs are vendored at pinned SHAs (Apache-2.0). Updating
+# the version is a one-line ARG bump + image rebuild — same model as the
+# claude-code / codex CLI pins above.
+ARG LEANPROVER_SKILLS_SHA=7d3da0282e7b724b07620e45cf212f2e05e19334
+ARG LEAN4_SKILLS_SHA=95406b3787957473fa97e4e8d62bd3225bcaa09b
+RUN git clone https://github.com/leanprover/skills.git /opt/lean-skills \
+ && git -C /opt/lean-skills checkout ${LEANPROVER_SKILLS_SHA} \
+ && rm -rf /opt/lean-skills/.git \
+ && git clone https://github.com/cameronfreer/lean4-skills.git /opt/lean4-skills \
+ && git -C /opt/lean4-skills checkout ${LEAN4_SKILLS_SHA} \
+ && rm -rf /opt/lean4-skills/.git
+
+# In-house skills (this repo): Coq+FCF cookbook, harness conventions.
+# First-class repo content under env/skills/, copied into the image so a
+# rebuild is the only update mechanism.
+COPY env/skills /opt/skills
+
+# --- Coq + OPAM + FCF (game-based crypto proofs in Coq) ---
+# OCaml's OPAM package manager is the standard installer for Coq + libraries.
+# FCF is the Foundational Cryptography Framework — Coq library specifically
+# built for game-based cryptographic proofs (advantage definitions, game hops,
+# reductions). Use case in this harness: closing the structural-vacuous-
+# placeholder cap on advantage axioms in the Lean trust base, where Lean
+# lacks a comparable mature library.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    opam ocaml ocaml-findlib m4 \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV OPAMROOT=/opt/opam
+ENV OPAMYES=1
+RUN opam init --disable-sandboxing --bare --root /opt/opam \
+ && opam switch create --root /opt/opam coq-8.18 ocaml.4.14.1 \
+ && eval $(opam env --root /opt/opam --switch=coq-8.18) \
+ && opam repo add --root /opt/opam --switch=coq-8.18 coq-released https://coq.inria.fr/opam/released \
+ && opam install --root /opt/opam --switch=coq-8.18 \
+      coq.8.18.0 \
+      coq-lsp \
+ && opam clean -a --root /opt/opam \
+ && chmod -R a+w /opt/opam
+
+# Make Coq + coq-lsp reachable for the agent without sourcing opam env.
+# coq-lsp ships the `pet` (Petanque) binary that rocq-mcp uses for interactive
+# proof state inspection.
+ENV PATH="/opt/opam/coq-8.18/bin:${PATH}"
+
+# --- FCF (Foundational Cryptography Framework) — runtime install ---
+# FCF master HEAD does not compile against Coq 8.18 (proof breakage in
+# ProgramLogic.v); the most recent FCF tag is coq_8_16. Pre-baking FCF
+# would require downgrading Coq to 8.16, which we don't want.
+#
+# Instead, FCF is installed at first use by the agent. The Coq skill at
+# /opt/skills/coq/SKILL.md documents the exact clone+make commands.
+# Container ships with git, make, ocaml, opam, coqc — everything FCF
+# needs. If FCF master gains Coq 8.18 support later, move this back to
+# image-bake.
+ENV COQPATH="/opt/opam/coq-8.18/lib/coq/user-contrib:/opt/fcf/src"
+
+# --- Rocq (Coq) MCP server — interactive REPL via Petanque ---
+# Parallel to the Lean MCP server. Gives the agent rocq.start_proof,
+# rocq.run_tactic, rocq.get_goals, rocq.search etc. for fast snippet
+# iteration without spinning up `coqc` per check.
+COPY env/mcp/rocq /opt/rocq-mcp
+RUN cd /opt/rocq-mcp && pip install --break-system-packages -e .
 
 # Let the runtime user write multi-file Lean projects into the workspace
 # and run `lake build`. We chmod both the source tree (Audit/) and

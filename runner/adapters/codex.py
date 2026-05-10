@@ -22,6 +22,10 @@ CODEX_MCP_TOML = """
 [mcp_servers.lean]
 command = "python3"
 args = ["-m", "lean_mcp.server"]
+
+[mcp_servers.rocq]
+command = "python3"
+args = ["-m", "rocq_mcp.server"]
 """
 
 

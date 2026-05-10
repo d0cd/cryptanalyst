@@ -202,6 +202,32 @@ if [[ -d "$TARGET_ABS/state" ]]; then
     PERSISTENCE_MOUNTS+=(-v "$STATE_SOURCE/.lake-cache/ir/Audit:/opt/lean-workspace/.lake/build/ir/Audit:rw")
 fi
 
+# Meta-audit mode: mount the full runs/ tree read-only at /repo/all-runs
+# so meta-audit can read prior hunt and formalize traces, findings, and
+# progress notes from any run on this machine. Read-only by mount option
+# so meta-audit cannot corrupt sibling runs even if its prompt is wrong.
+META_AUDIT_MOUNTS=()
+if [[ "$MODE" == "meta-audit" ]]; then
+    if [[ -d "$REPO/runs" ]]; then
+        META_AUDIT_MOUNTS+=(-v "$REPO/runs:/repo/all-runs:ro")
+    fi
+fi
+
+# Hunt-mode precondition: warn if state/lean/ is empty. Hunt depends on
+# the durable formal model for cross-referencing findings via
+# `verification_artifact`. Empty state/ is allowed (smoke targets, brand-
+# new audits) but produces broken VA pointers — formalize should run
+# first when possible. (Meta-audit recommendation R9, validated against
+# applied-21-frozen-heart and applied-04 published runs.)
+if [[ "$MODE" == "hunt" ]]; then
+    if [[ ! -d "$TARGET_ABS/state/lean" ]] || \
+       [[ -z "$(ls -A "$TARGET_ABS/state/lean" 2>/dev/null)" ]]; then
+        echo "WARN: $TARGET_ABS/state/lean/ is empty or missing." >&2
+        echo "  Hunt findings will lack durable verification_artifact pointers." >&2
+        echo "  Consider running formalize mode against this target first." >&2
+    fi
+fi
+
 # Cleanup the snapshot worktree on exit. If the run committed anything
 # to the worktree (e.g. hunt encoded a finding artifact), preserve the
 # worktree so the operator can inspect/merge: the path and the head
@@ -261,9 +287,8 @@ docker run --rm \
     -v "$REPO/runner:/repo/runner:ro" \
     -v "$REPO/instructions:/repo/instructions:ro" \
     -v "$REPO/prompts:/repo/prompts:ro" \
-    -v "$REPO/env/skills/lean-skills/skills:/repo/lean-skills:ro" \
-    -v "$REPO/env/skills/lean4-skills/plugins/lean4:/repo/lean4-skills:ro" \
     "${PERSISTENCE_MOUNTS[@]}" \
+    "${META_AUDIT_MOUNTS[@]}" \
     --tmpfs /tmp:size=2G \
     --memory=16g --cpus=4 --pids-limit=512 \
     "${AUTH_ARGS[@]}" \

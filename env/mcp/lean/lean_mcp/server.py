@@ -162,7 +162,7 @@ def check(code: str, env: int | None = None, timeout: float | None = None) -> di
         timeout: Per-call timeout in seconds. Defaults to 90s. Raise this
             for deliberately slow proofs (heavy `simp`, `decide`, large
             `import` chains). For very long proofs, prefer writing files
-            into /opt/lean-workspace/CryptoAudit/ and running `lake build`.
+            into /opt/lean-workspace/Audit/ and running `lake build`.
 
     Returns:
         A dict with keys:

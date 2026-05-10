@@ -53,9 +53,8 @@ applied-tier targets, run `./scripts/generate-fixtures` once.
 runner/        per-cycle loop + adapter protocol (claude.py, codex.py, base.py)
 prompts/       per-cycle agent prompts (hunt.md, formalize.md)
 instructions/  agent's always-loaded system prompt (AGENTS.md)
-scripts/       hunt, hunt-all, hunt-local, build-image, test-install, generate-fixtures, scrub-secrets, republish
-mcp_servers/   Lean MCP server (long-lived REPL)
-env/          Docker build context (Dockerfile, lakefile, requirements.txt) and vendored Lean skills
+scripts/       hunt, hunt-all, hunt-local, republish, build-image, generate-fixtures, scrub-secrets
+env/          Docker build context — Dockerfile, lakefile, requirements.txt, vendored Lean skills, MCP servers (mcp/lean, mcp/rocq)
 targets/       smoke / applied / blind / production / private (private + production gitignored)
 docs/          design notes, install / running / troubleshooting guides
 runs/          per-run output (gitignored except runs/published/ for demo evidence)

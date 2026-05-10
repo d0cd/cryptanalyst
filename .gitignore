@@ -44,8 +44,9 @@ env/lean_workspace/CryptoAudit/
 # Per-target snapshot worktrees (created by `scripts/hunt --snapshot`).
 **/.snapshots/
 
-# Third-party Lean skills (vendored clones, runtime-mounted into container)
-env/skills/
+# Skills are first-class repo content under env/skills/. In-house skills
+# (coq/, cryptanalyst/) are tracked in git; upstream Lean skill packs are
+# pinned by SHA in env/Dockerfile and cloned at image-build time.
 
 # OS
 .DS_Store

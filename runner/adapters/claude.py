@@ -81,7 +81,11 @@ class ClaudeAdapter:
             "lean": {
                 "command": "python3",
                 "args": ["-m", "lean_mcp.server"],
-            }
+            },
+            "rocq": {
+                "command": "python3",
+                "args": ["-m", "rocq_mcp.server"],
+            },
         }
 
         # Build options dict so we only pass model when set
@@ -101,6 +105,17 @@ class ClaudeAdapter:
                 "mcp__lean__check",
                 "mcp__lean__save_to_artifact",
                 "mcp__lean__restart",
+                "mcp__rocq__rocq_compile",
+                "mcp__rocq__rocq_compile_file",
+                "mcp__rocq__rocq_verify",
+                "mcp__rocq__rocq_query",
+                "mcp__rocq__rocq_assumptions",
+                "mcp__rocq__rocq_toc",
+                "mcp__rocq__rocq_notations",
+                "mcp__rocq__rocq_start",
+                "mcp__rocq__rocq_step_multi",
+                "mcp__rocq__rocq_check",
+                "mcp__rocq__rocq_diag",
             ],
             permission_mode="bypassPermissions",
         )

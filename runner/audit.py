@@ -178,6 +178,22 @@ async def main() -> None:
     print(f"  Max cycles: {args.max_cycles}, "
           f"cycle budget: {args.cycle_budget}s")
 
+    # Write a stub run.json at start so meta-audit and other tools can
+    # identify the run's mode and target while it's still in flight. The
+    # end-of-run write_run_json overwrites this with the full cycle log.
+    write_run_json(run_dir, {
+        "run_id": args.run_id,
+        "target_name": args.target_name,
+        "agent": args.agent,
+        "mode": args.mode,
+        "model": args.model,
+        "effort": args.effort,
+        "image_digest": args.image_digest,
+        "git_sha": args.git_sha,
+        "started_at": started_at.isoformat(),
+        "status": "running",
+    })
+
     cycle = 0
     cycle_log: list[dict] = []
 
@@ -210,6 +226,25 @@ async def main() -> None:
             "error": (result.error if result and result.error else None),
         })
         print(f"  [cycle {cycle}] {status} in {cdur:.1f}s", file=sys.stderr)
+
+        # Fail-fast detector: if N consecutive cycles complete in under
+        # FAIL_FAST_DURATION seconds, the agent is almost certainly
+        # returning empty (auth expired, quota hit, rate-limit hard-block).
+        # Burning 80 wasted no-op cycles wastes time and obscures the real
+        # exit cause. Stop early so the operator sees the pattern.
+        FAIL_FAST_DURATION = 30.0
+        FAIL_FAST_STREAK = 5
+        recent = cycle_log[-FAIL_FAST_STREAK:]
+        if len(recent) == FAIL_FAST_STREAK and all(
+            c["duration_seconds"] < FAIL_FAST_DURATION for c in recent
+        ):
+            print(
+                f"  [stop] {FAIL_FAST_STREAK} consecutive cycles completed in "
+                f"<{FAIL_FAST_DURATION}s — auth/quota/rate-limit failure suspected. "
+                f"Aborting before remaining cycles burn budget.",
+                file=sys.stderr,
+            )
+            break
 
     n_findings = post_run_check(run_dir)
     overall_dur = time.time() - overall_start

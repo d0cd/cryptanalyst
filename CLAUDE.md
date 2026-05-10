@@ -15,7 +15,7 @@ When you're working in this repo, you're modifying the harness itself.
 | `prompts/<mode>.md` | Per-mode user prompt — currently `hunt` |
 | `runner/audit.py` | In-container entrypoint; loop driver |
 | `runner/adapters/{claude,codex}.py` | One adapter per backend |
-| `mcp_servers/lean/` | Lean REPL wrapped as MCP tools |
+| `env/mcp/lean/` | Lean REPL wrapped as MCP tools |
 | `scripts/hunt` | Host-side wrapper: auth + `docker run` |
 | `scripts/hunt-local` | Same flow without Docker (uses host's claude OAuth) |
 | `scripts/hunt-all` | Sequential batch over a target tier |

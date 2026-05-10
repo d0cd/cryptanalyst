@@ -66,7 +66,7 @@ snapshot inputs, launch adapter, exit.
 README.md             ─ user-facing entry point
 docs/                 ─ this document and roadmap
 env/                  ─ Dockerfile, requirements.txt, Lean workspace
-mcp_servers/lean/     ─ Lean REPL wrapped as MCP tools
+env/mcp/lean/         ─ Lean REPL wrapped as MCP tools
 instructions/         ─ AGENTS.md (loaded as agent system prompt)
 prompts/              ─ hunt.md (per-mode user prompts)
 runner/
