@@ -21,7 +21,7 @@ When you're working in this repo, you're modifying the harness itself.
 | `scripts/hunt-all` | Sequential batch over a target tier |
 | `scripts/scrub-secrets` | Post-run API key scan; runs after every hunt |
 | `targets/{smoke,applied,blind}/<id>/` | Tracked test targets |
-| `targets/production/` | Real-world codebases (snarkVM, py_ecc, etc.) |
+| `targets/production/` | Real-world third-party codebases (descriptive names) |
 | `targets/private/` | **Gitignored.** Drop third-party / pre-disclosure code here |
 | `runs/` | **Gitignored** except `runs/published/`. One subdir per hunt |
 
@@ -43,7 +43,7 @@ When you're working in this repo, you're modifying the harness itself.
 - `--snapshot` mounts an isolated git-worktree of `<target>/state`
   for this run, so a hunt cycle can run alongside a formalize cycle
   on the same target without conflicting on `/repo/state`.
-- See `docs/DESIGN.md` §4.11–4.12 for the rationale.
+- See `docs/DESIGN.md` §5.11–5.12 for the rationale.
 
 ## When editing the harness
 
@@ -59,7 +59,7 @@ When you're working in this repo, you're modifying the harness itself.
   The runner's `run_one_cycle` decides which kwargs apply to which
   adapter based on `agent`.
 - **Don't add a fifth budget knob** without first justifying it against
-  the three-layer model in `docs/DESIGN.md` §4.11. Five overlapping
+  the three-layer model in `docs/DESIGN.md` §5.11. Five overlapping
   budget flags is what we just removed.
 - **Pin SDK / CLI versions** in `env/requirements.txt` and
   `env/Dockerfile`. Floating versions break reproducibility within

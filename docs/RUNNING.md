@@ -61,7 +61,7 @@ cycle limit, and total cost is bounded implicitly by
 At higher reasoning effort (`--effort high|xhigh|max`) cycles run
 longer; budgets in the 1000-1500s range are reasonable.
 
-See `docs/DESIGN.md` §4.11 for the rationale.
+See `docs/DESIGN.md` §5.11 for the rationale.
 
 ## Snapshot pipeline (parallel formalize + hunt)
 

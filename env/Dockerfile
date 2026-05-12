@@ -62,7 +62,7 @@ RUN npm install -g \
     @anthropic-ai/claude-code@2.1.128 \
     @openai/codex@0.128.0
 
-# --- Rust toolchain (for analyzing Rust crypto codebases like snarkVM) ---
+# --- Rust toolchain (for analyzing Rust crypto codebases) ---
 # Installed under /opt so the non-root runtime user can read it. CARGO_HOME
 # and RUSTUP_HOME are world-writable so rustup can fetch toolchains pinned
 # by a target's rust-toolchain.toml on first `cargo` invocation.
